@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { Presence } from '@/lib/supabase-browser'
 import { calculateDecay, latLngToVector3 } from '@/lib/geo'
@@ -13,12 +13,13 @@ interface PresenceLayerProps {
 
 /**
  * Manages rendering of presence dots on the globe
- * Handles brightness decay and click interactions
+ * Handles brightness decay, hover effects, and click interactions
  */
 export default function PresenceLayer({ globe, presences, onPresenceClick }: PresenceLayerProps) {
   const pointsRef = useRef<Map<string, THREE.Mesh>>(new Map())
   const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster())
   const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2())
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!globe) return
@@ -46,7 +47,7 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
       if (!point) {
         const position = latLngToVector3(presence.lat, presence.lng, globeRadius + 2)
         
-        // Create point geometry - slightly larger for visibility
+        // Create point geometry
         const geometry = new THREE.SphereGeometry(1.5, 16, 16)
         
         // Different color for online vs offline
@@ -70,6 +71,10 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
         const color = presence.is_online ? 0xffffff : 0xffb300
         material.color.setHex(color)
         point.userData = { presence }
+        
+        // Apply hover effect
+        const isHovered = hoveredId === presence.id
+        point.scale.set(isHovered ? 1.5 : 1, isHovered ? 1.5 : 1, isHovered ? 1.5 : 1)
       }
     })
 
@@ -85,45 +90,66 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
       }
     })
 
-    // Handle click interactions
-    const handleClick = (event: MouseEvent) => {
-      if (!onPresenceClick) return
-
-      // Calculate mouse position in normalized device coordinates
+    // Handle hover
+    const handleMouseMove = (event: MouseEvent) => {
       mouseRef.current.x = (event.clientX / window.innerWidth) * 2 - 1
       mouseRef.current.y = -(event.clientY / window.innerHeight) * 2 + 1
 
-      // Get camera from parent scene
-      const scene = globe.parent
+      // Get camera - it's in the scene, not globe's parent
+      const scene = globe.parent as THREE.Scene
       if (!scene) return
       
-      let camera: THREE.Camera | null = null
-      scene.traverse((child) => {
-        if (child instanceof THREE.Camera) {
-          camera = child
-        }
-      })
-      
+      // Find camera in scene
+      const camera = scene.children.find(child => child instanceof THREE.PerspectiveCamera) as THREE.Camera
       if (!camera) return
 
-      // Raycast to find clicked presence
       raycasterRef.current.setFromCamera(mouseRef.current, camera)
-      
       const intersects = raycasterRef.current.intersectObjects(Array.from(existingPoints.values()))
       
       if (intersects.length > 0) {
         const clickedPoint = intersects[0].object as THREE.Mesh
         const presence = clickedPoint.userData.presence as Presence
+        setHoveredId(presence.id)
+        document.body.style.cursor = 'pointer'
+      } else {
+        setHoveredId(null)
+        document.body.style.cursor = 'default'
+      }
+    }
+
+    // Handle click interactions
+    const handleClick = (event: MouseEvent) => {
+      if (!onPresenceClick) return
+
+      mouseRef.current.x = (event.clientX / window.innerWidth) * 2 - 1
+      mouseRef.current.y = -(event.clientY / window.innerHeight) * 2 + 1
+
+      const scene = globe.parent as THREE.Scene
+      if (!scene) return
+      
+      const camera = scene.children.find(child => child instanceof THREE.PerspectiveCamera) as THREE.Camera
+      if (!camera) return
+
+      raycasterRef.current.setFromCamera(mouseRef.current, camera)
+      const intersects = raycasterRef.current.intersectObjects(Array.from(existingPoints.values()))
+      
+      if (intersects.length > 0) {
+        const clickedPoint = intersects[0].object as THREE.Mesh
+        const presence = clickedPoint.userData.presence as Presence
+        console.log('Presence clicked!', presence)
         onPresenceClick(presence)
       }
     }
 
+    window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('click', handleClick)
 
     return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('click', handleClick)
+      document.body.style.cursor = 'default'
     }
-  }, [globe, presences, onPresenceClick])
+  }, [globe, presences, onPresenceClick, hoveredId])
 
   // Cleanup on unmount
   useEffect(() => {

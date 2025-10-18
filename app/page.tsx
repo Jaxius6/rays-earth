@@ -78,16 +78,14 @@ export default function HomePage() {
 
           // Fetch initial presences
           const initialPresences = await getRecentPresences()
-          setPresences(initialPresences)
           
-          // Add demo users if less than 2 real users
-          if (initialPresences.length < 2) {
-            setPresences([...initialPresences, ...DEMO_USERS])
-            setDemoMode(true)
-            announce(`${initialPresences.length} real users, showing demo users for testing`)
-          } else {
-            announce(`${initialPresences.length} people visible around the world`)
-          }
+          // ALWAYS add demo users for testing pings
+          const allPresences = [...initialPresences, ...DEMO_USERS]
+          setPresences(allPresences)
+          setDemoMode(true)
+          
+          console.log(`Loaded ${initialPresences.length} real users + ${DEMO_USERS.length} demo users`)
+          announce(`${allPresences.length} users visible (${DEMO_USERS.length} demo for testing)`)
         } else {
           console.warn('Supabase not configured - showing globe with demo users')
           setPresences(DEMO_USERS)
@@ -192,26 +190,30 @@ export default function HomePage() {
 
   // Handle presence click to send ping
   const handlePresenceClick = useCallback(async (presence: Presence) => {
-    if (!myPresence && !demoMode) return
+    // Don't ping yourself
     if (presence.id === myPresence?.id) return
 
-    // In demo mode, create local ping animation
-    if (demoMode || !myPresence) {
-      const demoPing: Ping = {
-        id: `demo-${Date.now()}`,
-        from_lat: myPresence?.lat || 0,
-        from_lng: myPresence?.lng || 0,
-        to_lat: presence.lat,
-        to_lng: presence.lng,
-        created_at: new Date().toISOString(),
-      }
-      setPings((prev) => [...prev, demoPing])
-      setTimeout(() => {
-        setPings((prev) => prev.filter((p) => p.id !== demoPing.id))
-      }, 3000)
-      announce('Demo ping sent')
-      return
+    console.log('Clicked presence:', presence)
+
+    // Always create local ping animation for instant feedback
+    const demoPing: Ping = {
+      id: `demo-${Date.now()}`,
+      from_lat: myPresence?.lat || presence.lat,
+      from_lng: myPresence?.lng || presence.lng,
+      to_lat: presence.lat,
+      to_lng: presence.lng,
+      created_at: new Date().toISOString(),
     }
+    
+    setPings((prev) => [...prev, demoPing])
+    setTimeout(() => {
+      setPings((prev) => prev.filter((p) => p.id !== demoPing.id))
+    }, 3000)
+    
+    announce('Ping sent')
+
+    // Also try to send real ping if we have a presence
+    if (!myPresence) return
 
     try {
       await emitPing(
@@ -256,11 +258,6 @@ export default function HomePage() {
         </>
       )}
 
-      {demoMode && (
-        <div className="fixed top-4 left-4 bg-rays-amber/10 text-rays-amber px-3 py-2 rounded text-xs">
-          Demo Mode • Click dots to test pings
-        </div>
-      )}
 
       <AudioGate />
       <AriaAnnouncer />

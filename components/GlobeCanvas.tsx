@@ -28,13 +28,42 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
 
     // Scene setup
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x0b0b0b)
+    scene.background = new THREE.Color(0x000000)
     sceneRef.current = scene
+
+    // Add subtle starfield - visible stars
+    const starsGeometry = new THREE.BufferGeometry()
+    const starCount = 3000
+    const positions = new Float32Array(starCount * 3)
+    
+    for (let i = 0; i < starCount * 3; i += 3) {
+      // Random position in sphere - closer and within camera range
+      const radius = 400 + Math.random() * 300 // 400-700 units away
+      const theta = Math.random() * Math.PI * 2
+      const phi = Math.acos(Math.random() * 2 - 1)
+      
+      positions[i] = radius * Math.sin(phi) * Math.cos(theta)
+      positions[i + 1] = radius * Math.sin(phi) * Math.sin(theta)
+      positions[i + 2] = radius * Math.cos(phi)
+    }
+    
+    starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    const starsMaterial = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 2, // Bigger stars
+      transparent: true,
+      opacity: 0.8,
+      sizeAttenuation: false, // Consistent size regardless of distance
+    })
+    
+    const stars = new THREE.Points(starsGeometry, starsMaterial)
+    scene.add(stars)
 
     // Camera setup
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000)
     camera.position.z = 300
     cameraRef.current = camera
+    scene.add(camera) // ADD CAMERA TO SCENE - CRITICAL!
 
     // Renderer setup
     const renderer = new THREE.WebGLRenderer({ 
@@ -50,16 +79,38 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     // Create globe group
     const globeGroup = new THREE.Group()
     
-    // Create sphere geometry (Earth) - Lower poly for faster loading
+    // Create sphere geometry (Earth)
     const geometry = new THREE.SphereGeometry(100, 48, 48)
     
-    // Simple grey material - faster than loading texture
+    // Start with grey, then load texture
     const material = new THREE.MeshPhongMaterial({
-      color: 0x333333,
-      emissive: 0x0a0a0a,
+      color: 0x444444,
+      emissive: 0x111111,
       shininess: 5,
-      flatShading: false,
     })
+
+    // Load Earth texture asynchronously (won't block initial render)
+    const textureLoader = new THREE.TextureLoader()
+    textureLoader.load(
+      'https://unpkg.com/three-globe@2.31.1/example/img/earth-blue-marble.jpg',
+      (texture) => {
+        // Convert to greyscale with very clear details
+        material.onBeforeCompile = (shader) => {
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <map_fragment>',
+            `
+            #ifdef USE_MAP
+              vec4 sampledDiffuseColor = texture2D( map, vMapUv );
+              float grey = dot(sampledDiffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+              diffuseColor *= vec4(vec3(grey * 0.9), sampledDiffuseColor.a);
+            #endif
+            `
+          )
+        }
+        material.map = texture
+        material.needsUpdate = true
+      }
+    )
 
     const sphere = new THREE.Mesh(geometry, material)
     globeGroup.add(sphere)

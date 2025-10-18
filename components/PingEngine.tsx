@@ -32,7 +32,7 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
 
       activeArcs.add(ping.id)
 
-      // Calculate arc path
+      // Calculate arc path with higher curve
       const arcPoints = interpolateGreatCircle(
         ping.from_lat,
         ping.from_lng,
@@ -41,13 +41,17 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
         50
       )
 
-      const positions: THREE.Vector3[] = arcPoints.map((point) => {
-        const pos = latLngToVector3(point.lat, point.lng, globeRadius + 4)
+      // Make arc loop higher above globe
+      const positions: THREE.Vector3[] = arcPoints.map((point, index) => {
+        const t = index / (arcPoints.length - 1) // 0 to 1
+        // Parabolic curve - highest in middle
+        const heightBoost = Math.sin(t * Math.PI) * 40 // Up to 40 units higher
+        const pos = latLngToVector3(point.lat, point.lng, globeRadius + 4 + heightBoost)
         return new THREE.Vector3(pos.x, pos.y, pos.z)
       })
 
-      // Create curve
-      const curve = new THREE.CatmullRomCurve3(positions)
+      // Create smooth curve
+      const curve = new THREE.CatmullRomCurve3(positions, false, 'catmullrom', 0.5)
       const points = curve.getPoints(100)
       const geometry = new THREE.BufferGeometry().setFromPoints(points)
 
@@ -71,35 +75,41 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
         Math.abs(ping.to_lat - myPresence.lat) < 0.01 && 
         Math.abs(ping.to_lng - myPresence.lng) < 0.01
 
-      // Create ripples at endpoints
+      // Create ripples at endpoints - VISIBLE and ANIMATED
       const createRipple = (lat: number, lng: number, delay: number) => {
-        const pos = latLngToVector3(lat, lng, globeRadius + 3)
-        const rippleGeometry = new THREE.RingGeometry(0.5, 1, 32)
+        const pos = latLngToVector3(lat, lng, globeRadius + 2.5) // Right on dot surface
+        const rippleGeometry = new THREE.RingGeometry(1, 2, 32) // Bigger initial size
         const rippleMaterial = new THREE.MeshBasicMaterial({
-          color: 0xffffff,
+          color: 0xffb300, // Amber like arcs
           transparent: true,
-          opacity: 0.8,
+          opacity: 1.0, // Start fully visible
           side: THREE.DoubleSide,
         })
         
         const ripple = new THREE.Mesh(rippleGeometry, rippleMaterial)
         ripple.position.set(pos.x, pos.y, pos.z)
-        ripple.lookAt(0, 0, 0)
+        
+        // Point ripple outward from globe center
+        const normal = new THREE.Vector3(pos.x, pos.y, pos.z).normalize()
+        ripple.lookAt(normal.x * 200, normal.y * 200, normal.z * 200)
+        
         globe.add(ripple)
+        
+        console.log('Created ripple at:', lat, lng, 'with delay:', delay)
 
-        // Animate ripple expansion
+        // Animate ripple expansion - MORE VISIBLE
         gsap.to(ripple.scale, {
-          x: 3,
-          y: 3,
-          z: 3,
-          duration: 1,
+          x: 4,
+          y: 4,
+          z: 4,
+          duration: 1.2,
           delay,
           ease: 'power2.out',
         })
 
         gsap.to(rippleMaterial, {
           opacity: 0,
-          duration: 1,
+          duration: 1.2,
           delay,
           ease: 'power2.out',
           onComplete: () => {
