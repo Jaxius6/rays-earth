@@ -42,8 +42,12 @@ export default function HomePage() {
         // Initialize audio system
         initializeAudio()
 
-        // Check if Supabase is configured
-        const hasSupabase = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        // Check if Supabase is configured (non-empty values)
+        const hasSupabase =
+          process.env.NEXT_PUBLIC_SUPABASE_URL &&
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
+          process.env.NEXT_PUBLIC_SUPABASE_URL.trim() !== '' &&
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.trim() !== ''
 
         if (hasSupabase) {
           // Request geolocation
