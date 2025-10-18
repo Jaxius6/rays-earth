@@ -42,33 +42,41 @@ export default function HomePage() {
         // Initialize audio system
         initializeAudio()
 
-        // Request geolocation
-        const position = await requestGeolocation()
-        
-        if (position) {
-          const { lat, lng } = roundCoordinates(
-            position.coords.latitude,
-            position.coords.longitude
-          )
+        // Check if Supabase is configured
+        const hasSupabase = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-          // Upsert presence
-          const presence = await upsertPresence(lat, lng)
-          setMyPresence(presence)
-          announce(`Connected to rays.earth at ${lat.toFixed(2)}, ${lng.toFixed(2)}`)
+        if (hasSupabase) {
+          // Request geolocation
+          const position = await requestGeolocation()
+          
+          if (position) {
+            const { lat, lng } = roundCoordinates(
+              position.coords.latitude,
+              position.coords.longitude
+            )
+
+            // Upsert presence
+            const presence = await upsertPresence(lat, lng)
+            setMyPresence(presence)
+            announce(`Connected to rays.earth at ${lat.toFixed(2)}, ${lng.toFixed(2)}`)
+          } else {
+            announce('Connected to rays.earth. Viewing global presence.')
+          }
+
+          // Fetch initial presences
+          const initialPresences = await getRecentPresences()
+          setPresences(initialPresences)
+          announce(`${initialPresences.length} people visible around the world`)
         } else {
-          announce('Connected to rays.earth. Viewing global presence.')
+          console.warn('Supabase not configured - showing globe only')
+          announce('Viewing rays.earth globe')
         }
-
-        // Fetch initial presences
-        const initialPresences = await getRecentPresences()
-        setPresences(initialPresences)
-        announce(`${initialPresences.length} people visible around the world`)
 
         setIsLoading(false)
       } catch (error) {
         console.error('Initialization error:', error)
         setIsLoading(false)
-        announce('Error connecting to rays.earth')
+        announce('Showing globe in offline mode')
       }
     }
 
