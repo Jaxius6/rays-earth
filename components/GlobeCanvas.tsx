@@ -2,22 +2,21 @@
 
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
-import ThreeGlobe from 'three-globe'
 
 interface GlobeCanvasProps {
-  onGlobeReady?: (globe: any) => void
+  onGlobeReady?: (globe: THREE.Group) => void
 }
 
 /**
  * Three.js canvas component rendering the 3D Earth
- * No borders, labels, or UI chrome - just the globe
+ * Pure Three.js implementation - no external globe library
  */
 export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
   const mountRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
-  const globeRef = useRef<any>(null)
+  const globeRef = useRef<THREE.Group | null>(null)
   const frameIdRef = useRef<number>(0)
 
   useEffect(() => {
@@ -29,6 +28,7 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
 
     // Scene setup
     const scene = new THREE.Scene()
+    scene.background = new THREE.Color(0x0b0b0b)
     sceneRef.current = scene
 
     // Camera setup
@@ -39,7 +39,7 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     // Renderer setup
     const renderer = new THREE.WebGLRenderer({ 
       antialias: true,
-      alpha: true,
+      alpha: false,
       powerPreference: 'high-performance'
     })
     renderer.setSize(width, height)
@@ -47,43 +47,63 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     container.appendChild(renderer.domElement)
     rendererRef.current = renderer
 
-    // Globe setup
-    const globe = new ThreeGlobe()
-      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-dark.jpg')
-      .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
-      .showAtmosphere(false)
-      .showGraticules(false)
+    // Create globe group
+    const globeGroup = new THREE.Group()
+    
+    // Create sphere geometry (Earth)
+    const geometry = new THREE.SphereGeometry(100, 64, 64)
+    
+    // Load texture and create material
+    const textureLoader = new THREE.TextureLoader()
+    const material = new THREE.MeshPhongMaterial({
+      color: 0x666666,
+      emissive: 0x111111,
+      shininess: 5,
+    })
 
-    // Convert globe to greyscale
-    globe.onGlobeReady(() => {
-      const globeMaterial = globe.children[0].material as THREE.MeshPhongMaterial
-      if (globeMaterial.map) {
-        // Create greyscale shader
-        const originalMap = globeMaterial.map
-        globeMaterial.onBeforeCompile = (shader) => {
+    // Try to load earth texture (will fallback to grey if fails)
+    textureLoader.load(
+      'https://unpkg.com/three-globe@2.31.1/example/img/earth-blue-marble.jpg',
+      (texture) => {
+        // Convert to greyscale using shader
+        material.onBeforeCompile = (shader) => {
           shader.fragmentShader = shader.fragmentShader.replace(
             '#include <map_fragment>',
             `
             #ifdef USE_MAP
-              vec4 sampledDiffuseColor = texture2D( map, vUv );
+              vec4 sampledDiffuseColor = texture2D( map, vMapUv );
               float grey = dot(sampledDiffuseColor.rgb, vec3(0.299, 0.587, 0.114));
               diffuseColor *= vec4(vec3(grey * 0.4), sampledDiffuseColor.a);
             #endif
             `
           )
         }
+        material.map = texture
+        material.needsUpdate = true
+      },
+      undefined,
+      (error) => {
+        console.warn('Could not load Earth texture, using grey sphere:', error)
       }
-    })
+    )
 
-    scene.add(globe)
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6))
-    scene.add(new THREE.DirectionalLight(0xffffff, 0.4))
+    const sphere = new THREE.Mesh(geometry, material)
+    globeGroup.add(sphere)
 
-    globeRef.current = globe
+    // Add lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
+    scene.add(ambientLight)
+    
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.4)
+    directionalLight.position.set(5, 3, 5)
+    scene.add(directionalLight)
+
+    scene.add(globeGroup)
+    globeRef.current = globeGroup
 
     // Notify parent that globe is ready
     if (onGlobeReady) {
-      onGlobeReady(globe)
+      onGlobeReady(globeGroup)
     }
 
     // Controls state
@@ -91,7 +111,7 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     let previousMousePosition = { x: 0, y: 0 }
     let rotation = { x: 0, y: 0 }
     let targetRotation = { x: 0, y: 0 }
-    let autoRotateSpeed = 0.0005
+    const autoRotateSpeed = 0.001
 
     // Mouse/touch controls
     const handlePointerDown = (e: MouseEvent | TouchEvent) => {
@@ -125,8 +145,8 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     container.addEventListener('mousedown', handlePointerDown)
     container.addEventListener('mousemove', handlePointerMove)
     container.addEventListener('mouseup', handlePointerUp)
-    container.addEventListener('touchstart', handlePointerDown)
-    container.addEventListener('touchmove', handlePointerMove)
+    container.addEventListener('touchstart', handlePointerDown, { passive: true })
+    container.addEventListener('touchmove', handlePointerMove, { passive: true })
     container.addEventListener('touchend', handlePointerUp)
 
     // Animation loop
@@ -142,8 +162,8 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
         targetRotation.y += autoRotateSpeed
       }
 
-      globe.rotation.x = rotation.x
-      globe.rotation.y = rotation.y
+      globeGroup.rotation.x = rotation.x
+      globeGroup.rotation.y = rotation.y
 
       renderer.render(scene, camera)
     }
@@ -173,8 +193,13 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
       
       if (renderer) {
         renderer.dispose()
-        container.removeChild(renderer.domElement)
+        if (container.contains(renderer.domElement)) {
+          container.removeChild(renderer.domElement)
+        }
       }
+      
+      geometry.dispose()
+      material.dispose()
     }
   }, [onGlobeReady])
 

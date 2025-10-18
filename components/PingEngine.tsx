@@ -8,7 +8,7 @@ import { interpolateGreatCircle, latLngToVector3 } from '@/lib/geo'
 import { playPing, playRipple } from '@/lib/audio'
 
 interface PingEngineProps {
-  globe: any
+  globe: THREE.Group
   pings: Ping[]
   myPresence?: { lat: number; lng: number }
 }
@@ -42,7 +42,7 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
       )
 
       const positions: THREE.Vector3[] = arcPoints.map((point) => {
-        const pos = latLngToVector3(point.lat, point.lng, globeRadius + 2)
+        const pos = latLngToVector3(point.lat, point.lng, globeRadius + 4)
         return new THREE.Vector3(pos.x, pos.y, pos.z)
       })
 
@@ -73,7 +73,7 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
 
       // Create ripples at endpoints
       const createRipple = (lat: number, lng: number, delay: number) => {
-        const pos = latLngToVector3(lat, lng, globeRadius + 1)
+        const pos = latLngToVector3(lat, lng, globeRadius + 3)
         const rippleGeometry = new THREE.RingGeometry(0.5, 1, 32)
         const rippleMaterial = new THREE.MeshBasicMaterial({
           color: 0xffffff,
@@ -135,7 +135,7 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
         duration: 0.2,
       })
 
-      // Arc travel animation using dash offset
+      // Arc travel animation
       timeline.to(material, {
         opacity: 0.8,
         duration: 1.5,

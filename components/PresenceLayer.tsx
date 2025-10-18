@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { Presence } from '@/lib/supabase-browser'
 import { calculateDecay, latLngToVector3 } from '@/lib/geo'
 
 interface PresenceLayerProps {
-  globe: any
+  globe: THREE.Group
   presences: Presence[]
   onPresenceClick?: (presence: Presence) => void
 }
@@ -44,14 +44,15 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
 
       // Create new point if doesn't exist
       if (!point) {
-        const position = latLngToVector3(presence.lat, presence.lng, globeRadius)
+        const position = latLngToVector3(presence.lat, presence.lng, globeRadius + 2)
         
-        // Create point geometry
-        const geometry = new THREE.SphereGeometry(0.5, 16, 16)
+        // Create point geometry - slightly larger for visibility
+        const geometry = new THREE.SphereGeometry(1.5, 16, 16)
         
-        // Different material for online vs offline
+        // Different color for online vs offline
+        const color = presence.is_online ? 0xffffff : 0xffb300
         const material = new THREE.MeshBasicMaterial({
-          color: presence.is_online ? 0xffffff : 0xffb300,
+          color,
           transparent: true,
           opacity: decay,
         })
@@ -66,7 +67,8 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
         // Update existing point
         const material = point.material as THREE.MeshBasicMaterial
         material.opacity = decay
-        material.color.setHex(presence.is_online ? 0xffffff : 0xffb300)
+        const color = presence.is_online ? 0xffffff : 0xffb300
+        material.color.setHex(color)
         point.userData = { presence }
       }
     })
@@ -75,6 +77,10 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
     existingPoints.forEach((point, id) => {
       if (!presences.find(p => p.id === id)) {
         globe.remove(point)
+        point.geometry.dispose()
+        if (point.material instanceof THREE.Material) {
+          point.material.dispose()
+        }
         existingPoints.delete(id)
       }
     })
@@ -87,15 +93,21 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
       mouseRef.current.x = (event.clientX / window.innerWidth) * 2 - 1
       mouseRef.current.y = -(event.clientY / window.innerHeight) * 2 + 1
 
-      // Find camera from globe's parent scene
+      // Get camera from parent scene
       const scene = globe.parent
       if (!scene) return
       
-      const camera = scene.children.find((child: any) => child.isCamera)
+      let camera: THREE.Camera | null = null
+      scene.traverse((child) => {
+        if (child instanceof THREE.Camera) {
+          camera = child
+        }
+      })
+      
       if (!camera) return
 
       // Raycast to find clicked presence
-      raycasterRef.current.setFromCamera(mouseRef.current, camera as THREE.Camera)
+      raycasterRef.current.setFromCamera(mouseRef.current, camera)
       
       const intersects = raycasterRef.current.intersectObjects(Array.from(existingPoints.values()))
       
