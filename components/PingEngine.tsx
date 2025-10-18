@@ -55,16 +55,26 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
       const points = curve.getPoints(100)
       const geometry = new THREE.BufferGeometry().setFromPoints(points)
 
-      // Create arc material
+      // Create thicker, shimmering arc material
       const material = new THREE.LineBasicMaterial({
         color: 0xffb300,
         transparent: true,
         opacity: 0,
-        linewidth: 2,
+        linewidth: 4, // Thicker line
       })
 
       const arc = new THREE.Line(geometry, material)
       globe.add(arc)
+      
+      // Add shimmer effect with a glow layer
+      const glowMaterial = new THREE.LineBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        linewidth: 6,
+      })
+      const glowArc = new THREE.Line(geometry.clone(), glowMaterial)
+      globe.add(glowArc)
 
       // Check if this ping involves the current user
       const isFromMe = myPresence && 
@@ -125,12 +135,14 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
         }
       }
 
-      // Animation timeline
+      // Animation timeline - LONGER and SHIMMERING
       const timeline = gsap.timeline({
         onComplete: () => {
           globe.remove(arc)
+          globe.remove(glowArc)
           geometry.dispose()
           material.dispose()
+          glowMaterial.dispose()
           activeArcs.delete(ping.id)
         },
       })
@@ -139,30 +151,51 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
       createRipple(ping.from_lat, ping.from_lng, 0)
       if (isFromMe) playRipple()
 
-      // Fade in arc
+      // Fade in arc slowly
       timeline.to(material, {
-        opacity: 0.6,
-        duration: 0.2,
+        opacity: 0.7,
+        duration: 0.5,
       })
+      
+      // Fade in glow arc
+      timeline.to(glowMaterial, {
+        opacity: 0.3,
+        duration: 0.5,
+      }, 0) // Start at same time
 
-      // Arc travel animation
+      // Arc travel animation - MUCH SLOWER
       timeline.to(material, {
-        opacity: 0.8,
-        duration: 1.5,
+        opacity: 0.9,
+        duration: 3, // 3 seconds to travel
         ease: 'power1.inOut',
         onStart: () => {
           if (isFromMe || isToMe) playPing()
         },
       })
+      
+      // Shimmer effect - pulsing glow
+      timeline.to(glowMaterial, {
+        opacity: 0.6,
+        duration: 1.5,
+        yoyo: true,
+        repeat: 1,
+        ease: 'sine.inOut',
+      }, 0.5) // Slight delay
 
       // Fade out arc
       timeline.to(material, {
         opacity: 0,
-        duration: 0.3,
+        duration: 0.8,
       })
+      
+      // Fade out glow
+      timeline.to(glowMaterial, {
+        opacity: 0,
+        duration: 0.8,
+      }, '-=0.8') // At same time
 
-      // End ripple at receiver
-      createRipple(ping.to_lat, ping.to_lng, 1.7)
+      // End ripple at receiver - delayed to match slower arc
+      createRipple(ping.to_lat, ping.to_lng, 3.5)
     })
   }, [globe, pings, myPresence])
 

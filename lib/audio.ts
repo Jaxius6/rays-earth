@@ -1,35 +1,21 @@
 /**
- * Audio management for rays.earth using Howler.js
- * Handles mobile gesture unlock and sound playback
+ * Audio management for rays.earth using Web Audio API
+ * Handles mobile gesture unlock and sound generation
  */
-
-import { Howl } from 'howler'
 
 let audioContext: AudioContext | null = null
 let isUnlocked = false
-
-// Sound instances
-let rippleSound: Howl | null = null
-let pingSound: Howl | null = null
 
 /**
  * Initialize audio system
  */
 export function initializeAudio() {
   if (typeof window === 'undefined') return
-
-  // Create Howl instances
-  rippleSound = new Howl({
-    src: ['/audio/ripple.wav'],
-    volume: 0.3,
-    preload: true,
-  })
-
-  pingSound = new Howl({
-    src: ['/audio/ping.wav'],
-    volume: 0.4,
-    preload: true,
-  })
+  
+  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+  if (AudioContextClass && !audioContext) {
+    audioContext = new AudioContextClass()
+  }
 }
 
 /**
@@ -68,26 +54,59 @@ export function unlockAudio(): Promise<boolean> {
 }
 
 /**
- * Play ripple sound effect
+ * Generate and play ripple sound effect - soft percussive click
  */
 export function playRipple() {
-  if (!isUnlocked || !rippleSound) return
+  if (!isUnlocked || !audioContext) return
   
   try {
-    rippleSound.play()
+    const now = audioContext.currentTime
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
+    
+    oscillator.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+    
+    // Soft click sound
+    oscillator.frequency.value = 800
+    oscillator.type = 'sine'
+    
+    // Quick fade out
+    gainNode.gain.setValueAtTime(0.15, now)
+    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1)
+    
+    oscillator.start(now)
+    oscillator.stop(now + 0.1)
   } catch (error) {
     console.warn('Failed to play ripple sound:', error)
   }
 }
 
 /**
- * Play ping sound effect
+ * Generate and play ping sound effect - warm tone
  */
 export function playPing() {
-  if (!isUnlocked || !pingSound) return
+  if (!isUnlocked || !audioContext) return
   
   try {
-    pingSound.play()
+    const now = audioContext.currentTime
+    const oscillator = audioContext.createOscillator()
+    const gainNode = audioContext.createGain()
+    
+    oscillator.connect(gainNode)
+    gainNode.connect(audioContext.destination)
+    
+    // Warm C note (523 Hz)
+    oscillator.frequency.value = 523
+    oscillator.type = 'sine'
+    
+    // Gentle fade in and out
+    gainNode.gain.setValueAtTime(0, now)
+    gainNode.gain.linearRampToValueAtTime(0.2, now + 0.05)
+    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3)
+    
+    oscillator.start(now)
+    oscillator.stop(now + 0.3)
   } catch (error) {
     console.warn('Failed to play ping sound:', error)
   }
@@ -101,33 +120,23 @@ export function isAudioUnlocked(): boolean {
 }
 
 /**
- * Set audio volumes (0-1 range)
+ * Set audio volumes (0-1 range) - Not applicable for Web Audio API generated sounds
  */
 export function setVolume(rippleVol: number, pingVol: number) {
-  if (rippleSound) rippleSound.volume(rippleVol)
-  if (pingSound) pingSound.volume(pingVol)
+  // Web Audio API sounds are generated on-the-fly, no persistent volume control needed
 }
 
 /**
- * Stop all sounds
+ * Stop all sounds - Not applicable for Web Audio API generated sounds
  */
 export function stopAllSounds() {
-  if (rippleSound) rippleSound.stop()
-  if (pingSound) pingSound.stop()
+  // Web Audio API sounds are short-lived and stop automatically
 }
 
 /**
  * Cleanup audio resources
  */
 export function cleanupAudio() {
-  if (rippleSound) {
-    rippleSound.unload()
-    rippleSound = null
-  }
-  if (pingSound) {
-    pingSound.unload()
-    pingSound = null
-  }
   if (audioContext) {
     audioContext.close()
     audioContext = null

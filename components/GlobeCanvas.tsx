@@ -31,7 +31,27 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     scene.background = new THREE.Color(0x000000)
     sceneRef.current = scene
 
-    // Add subtle starfield - visible stars
+    // Camera setup
+    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000)
+    camera.position.z = 300
+    cameraRef.current = camera
+    scene.add(camera) // ADD CAMERA TO SCENE - CRITICAL!
+
+    // Renderer setup
+    const renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      alpha: false,
+      powerPreference: 'high-performance'
+    })
+    renderer.setSize(width, height)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    container.appendChild(renderer.domElement)
+    rendererRef.current = renderer
+
+    // Create globe group (will contain Earth AND stars)
+    const globeGroup = new THREE.Group()
+    
+    // Add subtle starfield that rotates with globe
     const starsGeometry = new THREE.BufferGeometry()
     const starCount = 3000
     const positions = new Float32Array(starCount * 3)
@@ -50,34 +70,14 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
     const starsMaterial = new THREE.PointsMaterial({
       color: 0xffffff,
-      size: 2, // Bigger stars
+      size: 0.8, // Smaller, more subtle stars
       transparent: true,
-      opacity: 0.8,
-      sizeAttenuation: false, // Consistent size regardless of distance
+      opacity: 0.6,
+      sizeAttenuation: false,
     })
     
     const stars = new THREE.Points(starsGeometry, starsMaterial)
-    scene.add(stars)
-
-    // Camera setup
-    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000)
-    camera.position.z = 300
-    cameraRef.current = camera
-    scene.add(camera) // ADD CAMERA TO SCENE - CRITICAL!
-
-    // Renderer setup
-    const renderer = new THREE.WebGLRenderer({ 
-      antialias: true,
-      alpha: false,
-      powerPreference: 'high-performance'
-    })
-    renderer.setSize(width, height)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    container.appendChild(renderer.domElement)
-    rendererRef.current = renderer
-
-    // Create globe group
-    const globeGroup = new THREE.Group()
+    globeGroup.add(stars) // Add to globe group so they rotate together
     
     // Create sphere geometry (Earth)
     const geometry = new THREE.SphereGeometry(100, 48, 48)
