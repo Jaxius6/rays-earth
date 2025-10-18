@@ -24,12 +24,21 @@ const PingEngine = dynamic(() => import('@/components/PingEngine'), { ssr: false
 const AudioGate = dynamic(() => import('@/components/AudioGate'), { ssr: false })
 const AriaAnnouncer = dynamic(() => import('@/components/AriaAnnouncer'), { ssr: false })
 
+// Demo users for testing
+const DEMO_USERS: Presence[] = [
+  { id: 'demo-paris', lat: 48.86, lng: 2.35, last_active: new Date().toISOString(), is_online: true },
+  { id: 'demo-tokyo', lat: 35.68, lng: 139.69, last_active: new Date().toISOString(), is_online: true },
+  { id: 'demo-nyc', lat: 40.71, lng: -74.01, last_active: new Date().toISOString(), is_online: true },
+  { id: 'demo-sydney', lat: -33.87, lng: 151.21, last_active: new Date().toISOString(), is_online: true },
+]
+
 export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [globe, setGlobe] = useState<any>(null)
   const [myPresence, setMyPresence] = useState<Presence | null>(null)
   const [presences, setPresences] = useState<Presence[]>([])
   const [pings, setPings] = useState<Ping[]>([])
+  const [demoMode, setDemoMode] = useState(false)
   
   const presenceChannelRef = useRef<RealtimeChannel | null>(null)
   const pingChannelRef = useRef<RealtimeChannel | null>(null)
@@ -43,8 +52,8 @@ export default function HomePage() {
         initializeAudio()
 
         // Check if Supabase is configured (non-empty values)
-        const hasSupabase =
-          process.env.NEXT_PUBLIC_SUPABASE_URL &&
+        const hasSupabase = 
+          process.env.NEXT_PUBLIC_SUPABASE_URL && 
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
           process.env.NEXT_PUBLIC_SUPABASE_URL.trim() !== '' &&
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.trim() !== ''
@@ -70,17 +79,30 @@ export default function HomePage() {
           // Fetch initial presences
           const initialPresences = await getRecentPresences()
           setPresences(initialPresences)
-          announce(`${initialPresences.length} people visible around the world`)
+          
+          // Add demo users if less than 2 real users
+          if (initialPresences.length < 2) {
+            setPresences([...initialPresences, ...DEMO_USERS])
+            setDemoMode(true)
+            announce(`${initialPresences.length} real users, showing demo users for testing`)
+          } else {
+            announce(`${initialPresences.length} people visible around the world`)
+          }
         } else {
-          console.warn('Supabase not configured - showing globe only')
-          announce('Viewing rays.earth globe')
+          console.warn('Supabase not configured - showing globe with demo users')
+          setPresences(DEMO_USERS)
+          setDemoMode(true)
+          announce('Viewing rays.earth globe with demo users')
         }
 
         setIsLoading(false)
       } catch (error) {
         console.error('Initialization error:', error)
+        // Show demo users on error
+        setPresences(DEMO_USERS)
+        setDemoMode(true)
         setIsLoading(false)
-        announce('Showing globe in offline mode')
+        announce('Showing globe with demo users')
       }
     }
 
@@ -94,7 +116,7 @@ export default function HomePage() {
     // Subscribe to presence changes
     const presenceChannel = subscribeToPresences(
       (presence) => {
-        setPresences((prev) => [...prev, presence])
+        setPresences((prev) => [...prev.filter(p => p.id !== presence.id), presence])
         announce('Someone new appeared')
       },
       (presence) => {
@@ -153,7 +175,6 @@ export default function HomePage() {
 
     const handleBeforeUnload = () => {
       if (myPresence) {
-        // Use sendBeacon for reliability
         const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/set_offline`
         const data = JSON.stringify({ id: myPresence.id })
         navigator.sendBeacon(url, data)
@@ -171,8 +192,26 @@ export default function HomePage() {
 
   // Handle presence click to send ping
   const handlePresenceClick = useCallback(async (presence: Presence) => {
-    if (!myPresence) return
-    if (presence.id === myPresence.id) return
+    if (!myPresence && !demoMode) return
+    if (presence.id === myPresence?.id) return
+
+    // In demo mode, create local ping animation
+    if (demoMode || !myPresence) {
+      const demoPing: Ping = {
+        id: `demo-${Date.now()}`,
+        from_lat: myPresence?.lat || 0,
+        from_lng: myPresence?.lng || 0,
+        to_lat: presence.lat,
+        to_lng: presence.lng,
+        created_at: new Date().toISOString(),
+      }
+      setPings((prev) => [...prev, demoPing])
+      setTimeout(() => {
+        setPings((prev) => prev.filter((p) => p.id !== demoPing.id))
+      }, 3000)
+      announce('Demo ping sent')
+      return
+    }
 
     try {
       await emitPing(
@@ -185,13 +224,13 @@ export default function HomePage() {
     } catch (error) {
       console.error('Failed to send ping:', error)
     }
-  }, [myPresence])
+  }, [myPresence, demoMode])
 
   if (isLoading) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-b from-rays-bg-dark to-rays-bg-light">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-rays-amber border-t-transparent rounded-full spinner mx-auto mb-4" />
+          <div className="w-12 h-12 border-2 border-rays-amber border-t-transparent rounded-full spinner mx-auto mb-4" />
           <p className="sr-only">Loading rays.earth...</p>
         </div>
       </div>
@@ -215,6 +254,12 @@ export default function HomePage() {
             myPresence={myPresence ? { lat: myPresence.lat, lng: myPresence.lng } : undefined}
           />
         </>
+      )}
+
+      {demoMode && (
+        <div className="fixed top-4 left-4 bg-rays-amber/10 text-rays-amber px-3 py-2 rounded text-xs">
+          Demo Mode • Click dots to test pings
+        </div>
       )}
 
       <AudioGate />

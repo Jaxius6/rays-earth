@@ -50,42 +50,16 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     // Create globe group
     const globeGroup = new THREE.Group()
     
-    // Create sphere geometry (Earth)
-    const geometry = new THREE.SphereGeometry(100, 64, 64)
+    // Create sphere geometry (Earth) - Lower poly for faster loading
+    const geometry = new THREE.SphereGeometry(100, 48, 48)
     
-    // Load texture and create material
-    const textureLoader = new THREE.TextureLoader()
+    // Simple grey material - faster than loading texture
     const material = new THREE.MeshPhongMaterial({
-      color: 0x666666,
-      emissive: 0x111111,
+      color: 0x333333,
+      emissive: 0x0a0a0a,
       shininess: 5,
+      flatShading: false,
     })
-
-    // Try to load earth texture (will fallback to grey if fails)
-    textureLoader.load(
-      'https://unpkg.com/three-globe@2.31.1/example/img/earth-blue-marble.jpg',
-      (texture) => {
-        // Convert to greyscale using shader
-        material.onBeforeCompile = (shader) => {
-          shader.fragmentShader = shader.fragmentShader.replace(
-            '#include <map_fragment>',
-            `
-            #ifdef USE_MAP
-              vec4 sampledDiffuseColor = texture2D( map, vMapUv );
-              float grey = dot(sampledDiffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-              diffuseColor *= vec4(vec3(grey * 0.4), sampledDiffuseColor.a);
-            #endif
-            `
-          )
-        }
-        material.map = texture
-        material.needsUpdate = true
-      },
-      undefined,
-      (error) => {
-        console.warn('Could not load Earth texture, using grey sphere:', error)
-      }
-    )
 
     const sphere = new THREE.Mesh(geometry, material)
     globeGroup.add(sphere)
