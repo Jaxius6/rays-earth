@@ -60,17 +60,18 @@ export function playRipple() {
   if (!isUnlocked || !audioContext) return
   
   try {
-    const now = audioContext.currentTime
+    const ctx = audioContext!
+    const now = ctx.currentTime
     
     // Create layered harmonics for ethereal quality
     const frequencies = [880, 1320, 1760] // A5, E6, A6 - perfect fifth harmony
     
     frequencies.forEach((freq, index) => {
-      const oscillator = audioContext.createOscillator()
-      const gainNode = audioContext.createGain()
+      const oscillator = ctx.createOscillator()
+      const gainNode = ctx.createGain()
       
       oscillator.connect(gainNode)
-      gainNode.connect(audioContext.destination)
+      gainNode.connect(ctx.destination)
       
       oscillator.frequency.value = freq
       oscillator.type = 'sine'
@@ -96,7 +97,8 @@ export function playPing() {
   if (!isUnlocked || !audioContext) return
   
   try {
-    const now = audioContext.currentTime
+    const ctx = audioContext!
+    const now = ctx.currentTime
     
     // Create bell-like sound with harmonics
     const fundamental = 523 // C5
@@ -108,11 +110,11 @@ export function playPing() {
     ]
     
     harmonics.forEach(({ freq, gain }) => {
-      const oscillator = audioContext.createOscillator()
-      const gainNode = audioContext.createGain()
+      const oscillator = ctx.createOscillator()
+      const gainNode = ctx.createGain()
       
       oscillator.connect(gainNode)
-      gainNode.connect(audioContext.destination)
+      gainNode.connect(ctx.destination)
       
       oscillator.frequency.value = freq
       oscillator.type = 'sine'

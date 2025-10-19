@@ -53,7 +53,9 @@ export default function HomePage() {
 
   // Request geolocation AFTER globe is ready
   useEffect(() => {
-    if (!globe || !globeLoading) return
+    if (!globe || globeLoading) return
+    
+    console.log('Starting geolocation and data fetch...')
     
     const init = async () => {
       try {
@@ -104,14 +106,11 @@ export default function HomePage() {
           setDemoMode(true)
           announce('Viewing rays.earth globe with demo users')
         }
-
-        setIsLoading(false)
       } catch (error) {
         console.error('Initialization error:', error)
         // Show demo users on error
         setPresences(DEMO_USERS)
         setDemoMode(true)
-        setIsLoading(false)
         announce('Showing globe with demo users')
       }
     }
@@ -121,10 +120,11 @@ export default function HomePage() {
   
   // Handle globe ready callback
   const handleGlobeReady = useCallback((globeInstance: any, controls: { centerOn: (lat: number, lng: number) => void }) => {
+    console.log('Globe is ready!')
     setGlobe(globeInstance)
     globeControlsRef.current = controls
     setGlobeLoading(false)
-    setIsLoading(false)
+    setIsLoading(false) // Hide loader immediately - globe is visible!
   }, [])
 
   // Subscribe to realtime updates
