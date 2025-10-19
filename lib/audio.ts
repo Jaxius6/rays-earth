@@ -54,59 +54,77 @@ export function unlockAudio(): Promise<boolean> {
 }
 
 /**
- * Generate and play ripple sound effect - soft percussive click
+ * Generate and play ripple sound effect - euphoric, crystalline chime
  */
 export function playRipple() {
   if (!isUnlocked || !audioContext) return
   
   try {
     const now = audioContext.currentTime
-    const oscillator = audioContext.createOscillator()
-    const gainNode = audioContext.createGain()
     
-    oscillator.connect(gainNode)
-    gainNode.connect(audioContext.destination)
+    // Create layered harmonics for ethereal quality
+    const frequencies = [880, 1320, 1760] // A5, E6, A6 - perfect fifth harmony
     
-    // Soft click sound
-    oscillator.frequency.value = 800
-    oscillator.type = 'sine'
-    
-    // Quick fade out
-    gainNode.gain.setValueAtTime(0.15, now)
-    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1)
-    
-    oscillator.start(now)
-    oscillator.stop(now + 0.1)
+    frequencies.forEach((freq, index) => {
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      
+      oscillator.frequency.value = freq
+      oscillator.type = 'sine'
+      
+      // Cascading volume for depth
+      const volume = 0.08 * (1 - index * 0.3)
+      gainNode.gain.setValueAtTime(0, now)
+      gainNode.gain.linearRampToValueAtTime(volume, now + 0.02)
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.4)
+      
+      oscillator.start(now)
+      oscillator.stop(now + 0.4)
+    })
   } catch (error) {
     console.warn('Failed to play ripple sound:', error)
   }
 }
 
 /**
- * Generate and play ping sound effect - warm tone
+ * Generate and play ping sound effect - warm, resonant bell tone
  */
 export function playPing() {
   if (!isUnlocked || !audioContext) return
   
   try {
     const now = audioContext.currentTime
-    const oscillator = audioContext.createOscillator()
-    const gainNode = audioContext.createGain()
     
-    oscillator.connect(gainNode)
-    gainNode.connect(audioContext.destination)
+    // Create bell-like sound with harmonics
+    const fundamental = 523 // C5
+    const harmonics = [
+      { freq: fundamental, gain: 0.15 },
+      { freq: fundamental * 2, gain: 0.08 }, // Octave
+      { freq: fundamental * 3, gain: 0.04 }, // Perfect fifth
+      { freq: fundamental * 4, gain: 0.02 }, // Two octaves
+    ]
     
-    // Warm C note (523 Hz)
-    oscillator.frequency.value = 523
-    oscillator.type = 'sine'
-    
-    // Gentle fade in and out
-    gainNode.gain.setValueAtTime(0, now)
-    gainNode.gain.linearRampToValueAtTime(0.2, now + 0.05)
-    gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3)
-    
-    oscillator.start(now)
-    oscillator.stop(now + 0.3)
+    harmonics.forEach(({ freq, gain }) => {
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+      
+      oscillator.frequency.value = freq
+      oscillator.type = 'sine'
+      
+      // Bell envelope - quick attack, long decay
+      gainNode.gain.setValueAtTime(0, now)
+      gainNode.gain.linearRampToValueAtTime(gain, now + 0.01)
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.8)
+      
+      oscillator.start(now)
+      oscillator.stop(now + 0.8)
+    })
   } catch (error) {
     console.warn('Failed to play ping sound:', error)
   }

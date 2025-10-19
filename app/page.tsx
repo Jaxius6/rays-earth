@@ -34,6 +34,7 @@ const DEMO_USERS: Presence[] = [
 
 export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true)
+  const [globeLoading, setGlobeLoading] = useState(true)
   const [globe, setGlobe] = useState<any>(null)
   const [myPresence, setMyPresence] = useState<Presence | null>(null)
   const [presences, setPresences] = useState<Presence[]>([])
@@ -43,23 +44,28 @@ export default function HomePage() {
   const presenceChannelRef = useRef<RealtimeChannel | null>(null)
   const pingChannelRef = useRef<RealtimeChannel | null>(null)
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const globeControlsRef = useRef<{ centerOn: (lat: number, lng: number) => void } | null>(null)
 
-  // Initialize on mount
+  // Initialize audio immediately
   useEffect(() => {
+    initializeAudio()
+  }, [])
+
+  // Request geolocation AFTER globe is ready
+  useEffect(() => {
+    if (!globe || !globeLoading) return
+    
     const init = async () => {
       try {
-        // Initialize audio system
-        initializeAudio()
-
         // Check if Supabase is configured (non-empty values)
-        const hasSupabase = 
-          process.env.NEXT_PUBLIC_SUPABASE_URL && 
+        const hasSupabase =
+          process.env.NEXT_PUBLIC_SUPABASE_URL &&
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
           process.env.NEXT_PUBLIC_SUPABASE_URL.trim() !== '' &&
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.trim() !== ''
 
         if (hasSupabase) {
-          // Request geolocation
+          // NOW request geolocation after globe is visible
           const position = await requestGeolocation()
           
           if (position) {
@@ -71,6 +77,12 @@ export default function HomePage() {
             // Upsert presence
             const presence = await upsertPresence(lat, lng)
             setMyPresence(presence)
+            
+            // Center globe on user's location
+            if (globeControlsRef.current) {
+              globeControlsRef.current.centerOn(lat, lng)
+            }
+            
             announce(`Connected to rays.earth at ${lat.toFixed(2)}, ${lng.toFixed(2)}`)
           } else {
             announce('Connected to rays.earth. Viewing global presence.')
@@ -105,6 +117,14 @@ export default function HomePage() {
     }
 
     init()
+  }, [globe, globeLoading])
+  
+  // Handle globe ready callback
+  const handleGlobeReady = useCallback((globeInstance: any, controls: { centerOn: (lat: number, lng: number) => void }) => {
+    setGlobe(globeInstance)
+    globeControlsRef.current = controls
+    setGlobeLoading(false)
+    setIsLoading(false)
   }, [])
 
   // Subscribe to realtime updates
@@ -241,7 +261,7 @@ export default function HomePage() {
 
   return (
     <main className="fixed inset-0 overflow-hidden">
-      <GlobeCanvas onGlobeReady={setGlobe} />
+      <GlobeCanvas onGlobeReady={handleGlobeReady} />
       
       {globe && (
         <>

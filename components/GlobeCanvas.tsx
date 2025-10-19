@@ -2,9 +2,10 @@
 
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import gsap from 'gsap'
 
 interface GlobeCanvasProps {
-  onGlobeReady?: (globe: THREE.Group) => void
+  onGlobeReady?: (globe: THREE.Group, controls: { centerOn: (lat: number, lng: number) => void }) => void
 }
 
 /**
@@ -31,9 +32,10 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     scene.background = new THREE.Color(0x000000)
     sceneRef.current = scene
 
-    // Camera setup
+    // Camera setup - adjust for mobile
+    const isMobile = width < 768
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000)
-    camera.position.z = 300
+    camera.position.z = isMobile ? 250 : 300 // Closer on mobile
     cameraRef.current = camera
     scene.add(camera) // ADD CAMERA TO SCENE - CRITICAL!
 
@@ -70,9 +72,9 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
     const starsMaterial = new THREE.PointsMaterial({
       color: 0xffffff,
-      size: 0.8, // Smaller, more subtle stars
+      size: 1.2, // More visible stars
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.8, // Brighter
       sizeAttenuation: false,
     })
     
@@ -102,7 +104,7 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
             #ifdef USE_MAP
               vec4 sampledDiffuseColor = texture2D( map, vMapUv );
               float grey = dot(sampledDiffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-              diffuseColor *= vec4(vec3(grey * 0.9), sampledDiffuseColor.a);
+              diffuseColor *= vec4(vec3(grey * 1.1), sampledDiffuseColor.a);
             #endif
             `
           )
@@ -126,17 +128,32 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     scene.add(globeGroup)
     globeRef.current = globeGroup
 
-    // Notify parent that globe is ready
-    if (onGlobeReady) {
-      onGlobeReady(globeGroup)
-    }
-
     // Controls state
     let isDragging = false
     let previousMousePosition = { x: 0, y: 0 }
     let rotation = { x: 0, y: 0 }
     let targetRotation = { x: 0, y: 0 }
     const autoRotateSpeed = 0.001
+
+    // Function to center camera on specific coordinates
+    const centerOn = (lat: number, lng: number) => {
+      // Convert lat/lng to rotation angles
+      const targetY = -(lng * Math.PI) / 180
+      const targetX = (lat * Math.PI) / 180
+      
+      // Smoothly animate to target
+      gsap.to(targetRotation, {
+        x: targetX,
+        y: targetY,
+        duration: 2,
+        ease: 'power2.inOut'
+      })
+    }
+
+    // Notify parent that globe is ready with controls
+    if (onGlobeReady) {
+      onGlobeReady(globeGroup, { centerOn })
+    }
 
     // Mouse/touch controls
     const handlePointerDown = (e: MouseEvent | TouchEvent) => {
