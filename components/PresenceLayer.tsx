@@ -20,6 +20,8 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
   const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster())
   const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2())
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const hoverRippleRef = useRef<THREE.Mesh | null>(null)
+  const animationFrameRef = useRef<number>(0)
 
   useEffect(() => {
     if (!globe) return
@@ -72,9 +74,9 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
         material.color.setHex(color)
         point.userData = { presence }
         
-        // Apply hover effect
+        // Apply subtle hover scale
         const isHovered = hoveredId === presence.id
-        point.scale.set(isHovered ? 1.5 : 1, isHovered ? 1.5 : 1, isHovered ? 1.5 : 1)
+        point.scale.set(isHovered ? 1.3 : 1, isHovered ? 1.3 : 1, isHovered ? 1.3 : 1)
       }
     })
 
@@ -109,9 +111,72 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
       if (intersects.length > 0) {
         const clickedPoint = intersects[0].object as THREE.Mesh
         const presence = clickedPoint.userData.presence as Presence
-        setHoveredId(presence.id)
+        
+        if (hoveredId !== presence.id) {
+          setHoveredId(presence.id)
+          
+          // Create beautiful warping ripple on hover
+          if (hoverRippleRef.current) {
+            globe.remove(hoverRippleRef.current)
+            hoverRippleRef.current.geometry.dispose()
+            ;(hoverRippleRef.current.material as THREE.Material).dispose()
+          }
+          
+          const pos = latLngToVector3(presence.lat, presence.lng, 102.5)
+          const rippleGeometry = new THREE.RingGeometry(0.5, 1.5, 32)
+          const rippleMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.6,
+            side: THREE.DoubleSide,
+          })
+          
+          const ripple = new THREE.Mesh(rippleGeometry, rippleMaterial)
+          ripple.position.set(pos.x, pos.y, pos.z)
+          
+          const normal = new THREE.Vector3(pos.x, pos.y, pos.z).normalize()
+          ripple.lookAt(normal.x * 200, normal.y * 200, normal.z * 200)
+          
+          globe.add(ripple)
+          hoverRippleRef.current = ripple
+          
+          // Animate ripple with warping effect
+          let startTime = Date.now()
+          const animateRipple = () => {
+            const elapsed = (Date.now() - startTime) / 1000
+            if (elapsed > 0.8 || hoveredId !== presence.id) {
+              if (hoverRippleRef.current) {
+                globe.remove(hoverRippleRef.current)
+                hoverRippleRef.current.geometry.dispose()
+                ;(hoverRippleRef.current.material as THREE.Material).dispose()
+                hoverRippleRef.current = null
+              }
+              return
+            }
+            
+            // Warping scale with noise-like variation
+            const baseScale = 1 + elapsed * 3
+            const warp = Math.sin(elapsed * 10) * 0.2
+            ripple.scale.set(baseScale + warp, baseScale - warp * 0.5, 1)
+            
+            // Fade out
+            rippleMaterial.opacity = 0.6 * (1 - elapsed / 0.8)
+            
+            animationFrameRef.current = requestAnimationFrame(animateRipple)
+          }
+          animateRipple()
+        }
+        
         document.body.style.cursor = 'pointer'
       } else {
+        if (hoveredId) {
+          if (hoverRippleRef.current) {
+            globe.remove(hoverRippleRef.current)
+            hoverRippleRef.current.geometry.dispose()
+            ;(hoverRippleRef.current.material as THREE.Material).dispose()
+            hoverRippleRef.current = null
+          }
+        }
         setHoveredId(null)
         document.body.style.cursor = 'default'
       }
@@ -148,6 +213,16 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('click', handleClick)
       document.body.style.cursor = 'default'
+      
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
+      if (hoverRippleRef.current) {
+        globe.remove(hoverRippleRef.current)
+        hoverRippleRef.current.geometry.dispose()
+        ;(hoverRippleRef.current.material as THREE.Material).dispose()
+        hoverRippleRef.current = null
+      }
     }
   }, [globe, presences, onPresenceClick, hoveredId])
 

@@ -54,81 +54,94 @@ export function unlockAudio(): Promise<boolean> {
 }
 
 /**
- * Generate and play ripple sound effect - euphoric, crystalline chime
+ * Generate and play ethereal hum during arc travel
  */
-export function playRipple() {
+export function playArcHum() {
   if (!isUnlocked || !audioContext) return
   
   try {
     const ctx = audioContext!
     const now = ctx.currentTime
     
-    // Create layered harmonics for ethereal quality
-    const frequencies = [880, 1320, 1760] // A5, E6, A6 - perfect fifth harmony
+    // Deep ethereal drone with subtle movement
+    const fundamental = 110 // A2 - very low, grounding
     
-    frequencies.forEach((freq, index) => {
-      const oscillator = ctx.createOscillator()
+    // Create warm pad-like sound with multiple oscillators
+    const oscillators = [
+      { freq: fundamental, detune: 0, gain: 0.15 },
+      { freq: fundamental * 1.5, detune: -5, gain: 0.08 }, // Perfect fifth
+      { freq: fundamental * 2, detune: 3, gain: 0.06 }, // Octave
+      { freq: fundamental * 3, detune: -2, gain: 0.03 }, // Two octaves + fifth
+    ]
+    
+    oscillators.forEach(({ freq, detune, gain }) => {
+      const osc = ctx.createOscillator()
       const gainNode = ctx.createGain()
       
-      oscillator.connect(gainNode)
+      // Use triangle wave for warm, organic quality
+      osc.type = 'triangle'
+      osc.frequency.value = freq
+      osc.detune.value = detune
+      
+      osc.connect(gainNode)
       gainNode.connect(ctx.destination)
       
-      oscillator.frequency.value = freq
-      oscillator.type = 'sine'
-      
-      // Cascading volume for depth
-      const volume = 0.08 * (1 - index * 0.3)
+      // Slow fade in and out
       gainNode.gain.setValueAtTime(0, now)
-      gainNode.gain.linearRampToValueAtTime(volume, now + 0.02)
-      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.4)
+      gainNode.gain.linearRampToValueAtTime(gain, now + 0.3)
+      gainNode.gain.setValueAtTime(gain, now + 4.7)
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 5.0)
       
-      oscillator.start(now)
-      oscillator.stop(now + 0.4)
+      osc.start(now)
+      osc.stop(now + 5.0)
     })
   } catch (error) {
-    console.warn('Failed to play ripple sound:', error)
+    console.warn('Failed to play arc hum:', error)
   }
 }
 
 /**
- * Generate and play ping sound effect - warm, resonant bell tone
+ * Generate and play soulful bong - deep, warm, calming tone
  */
-export function playPing() {
+export function playBong() {
   if (!isUnlocked || !audioContext) return
   
   try {
     const ctx = audioContext!
     const now = ctx.currentTime
     
-    // Create bell-like sound with harmonics
-    const fundamental = 523 // C5
-    const harmonics = [
-      { freq: fundamental, gain: 0.15 },
-      { freq: fundamental * 2, gain: 0.08 }, // Octave
-      { freq: fundamental * 3, gain: 0.04 }, // Perfect fifth
-      { freq: fundamental * 4, gain: 0.02 }, // Two octaves
+    // Deep singing bowl / temple bell sound
+    const fundamental = 196 // G3 - warm, grounding
+    
+    // Fewer harmonics for cleaner, more soulful sound
+    const partials = [
+      { freq: fundamental, gain: 0.25 },
+      { freq: fundamental * 2.4, gain: 0.12 }, // Slightly detuned for character
+      { freq: fundamental * 3.8, gain: 0.06 }, // More organic intervals
     ]
     
-    harmonics.forEach(({ freq, gain }) => {
-      const oscillator = ctx.createOscillator()
+    partials.forEach(({ freq, gain }) => {
+      const osc = ctx.createOscillator()
       const gainNode = ctx.createGain()
       
-      oscillator.connect(gainNode)
+      // Sine wave for pure, calming tone
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      
+      osc.connect(gainNode)
       gainNode.connect(ctx.destination)
       
-      oscillator.frequency.value = freq
-      oscillator.type = 'sine'
-      
-      // Bell envelope - quick attack, long decay
+      // Gentle attack, long sustain - like a singing bowl
       gainNode.gain.setValueAtTime(0, now)
-      gainNode.gain.linearRampToValueAtTime(gain, now + 0.01)
-      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.8)
+      gainNode.gain.linearRampToValueAtTime(gain, now + 0.05)
+      gainNode.gain.exponentialRampToValueAtTime(gain * 0.3, now + 0.8)
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 2.5)
       
-      oscillator.start(now)
-      oscillator.stop(now + 0.8)
+      osc.start(now)
+      osc.stop(now + 2.5)
     })
   } catch (error) {
-    console.warn('Failed to play ping sound:', error)
+    console.warn('Failed to play bong:', error)
   }
 }
 

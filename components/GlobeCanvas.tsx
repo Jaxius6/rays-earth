@@ -133,7 +133,10 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     let previousMousePosition = { x: 0, y: 0 }
     let rotation = { x: 0, y: 0 }
     let targetRotation = { x: 0, y: 0 }
+    let lastInteractionTime = Date.now()
+    let isAutoRotating = false
     const autoRotateSpeed = 0.001
+    const INACTIVITY_DELAY = 5000 // 5 seconds
 
     // Function to center camera on specific coordinates
     const centerOn = (lat: number, lng: number) => {
@@ -146,7 +149,11 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
         x: targetX,
         y: targetY,
         duration: 2,
-        ease: 'power2.inOut'
+        ease: 'power2.inOut',
+        onComplete: () => {
+          // Reset timer after centering animation completes
+          lastInteractionTime = Date.now()
+        }
       })
     }
 
@@ -158,6 +165,8 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     // Mouse/touch controls
     const handlePointerDown = (e: MouseEvent | TouchEvent) => {
       isDragging = true
+      lastInteractionTime = Date.now()
+      isAutoRotating = false
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
       const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
       previousMousePosition = { x: clientX, y: clientY }
@@ -166,6 +175,9 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     const handlePointerMove = (e: MouseEvent | TouchEvent) => {
       if (!isDragging) return
 
+      lastInteractionTime = Date.now()
+      isAutoRotating = false
+      
       const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
       const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY
 
@@ -181,6 +193,7 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
 
     const handlePointerUp = () => {
       isDragging = false
+      lastInteractionTime = Date.now()
     }
 
     // Add event listeners
@@ -199,8 +212,12 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
       rotation.x += (targetRotation.x - rotation.x) * 0.1
       rotation.y += (targetRotation.y - rotation.y) * 0.1
 
-      // Gentle auto-rotate when not dragging
-      if (!isDragging) {
+      // Auto-rotate only after 5 seconds of inactivity
+      const timeSinceInteraction = Date.now() - lastInteractionTime
+      if (!isDragging && timeSinceInteraction > INACTIVITY_DELAY) {
+        if (!isAutoRotating) {
+          isAutoRotating = true
+        }
         targetRotation.y += autoRotateSpeed
       }
 
