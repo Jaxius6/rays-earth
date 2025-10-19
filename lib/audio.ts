@@ -5,6 +5,8 @@
 
 let audioContext: AudioContext | null = null
 let isUnlocked = false
+let bongClickCount = 0
+let lastBongTime = 0
 
 /**
  * Initialize audio system
@@ -54,7 +56,7 @@ export function unlockAudio(): Promise<boolean> {
 }
 
 /**
- * Generate and play ethereal hum during arc travel
+ * Generate and play ethereal hum during arc travel - QUIETER
  */
 export function playArcHum() {
   if (!isUnlocked || !audioContext) return
@@ -66,12 +68,12 @@ export function playArcHum() {
     // Deep ethereal drone with subtle movement
     const fundamental = 110 // A2 - very low, grounding
     
-    // Create warm pad-like sound with multiple oscillators
+    // Create warm pad-like sound with multiple oscillators - REDUCED VOLUME
     const oscillators = [
-      { freq: fundamental, detune: 0, gain: 0.15 },
-      { freq: fundamental * 1.5, detune: -5, gain: 0.08 }, // Perfect fifth
-      { freq: fundamental * 2, detune: 3, gain: 0.06 }, // Octave
-      { freq: fundamental * 3, detune: -2, gain: 0.03 }, // Two octaves + fifth
+      { freq: fundamental, detune: 0, gain: 0.06 }, // Was 0.15
+      { freq: fundamental * 1.5, detune: -5, gain: 0.03 }, // Was 0.08
+      { freq: fundamental * 2, detune: 3, gain: 0.02 }, // Was 0.06
+      { freq: fundamental * 3, detune: -2, gain: 0.01 }, // Was 0.03
     ]
     
     oscillators.forEach(({ freq, detune, gain }) => {
@@ -101,7 +103,7 @@ export function playArcHum() {
 }
 
 /**
- * Generate and play soulful bong - deep, warm, calming tone
+ * Generate and play soulful bong - SINGLE, QUIETER, with harmonization
  */
 export function playBong() {
   if (!isUnlocked || !audioContext) return
@@ -110,36 +112,37 @@ export function playBong() {
     const ctx = audioContext!
     const now = ctx.currentTime
     
-    // Deep singing bowl / temple bell sound
-    const fundamental = 196 // G3 - warm, grounding
+    // Reset counter after 10 seconds of no bongs
+    if (Date.now() - lastBongTime > 10000) {
+      bongClickCount = 0
+    }
+    bongClickCount++
+    lastBongTime = Date.now()
     
-    // Fewer harmonics for cleaner, more soulful sound
-    const partials = [
-      { freq: fundamental, gain: 0.25 },
-      { freq: fundamental * 2.4, gain: 0.12 }, // Slightly detuned for character
-      { freq: fundamental * 3.8, gain: 0.06 }, // More organic intervals
-    ]
+    // Base frequencies for harmonic progression (pentatonic scale)
+    const baseFreqs = [196, 220, 247, 294, 330] // G3, A3, B3, D4, E4
+    const freqIndex = Math.min(bongClickCount - 1, baseFreqs.length - 1)
+    const fundamental = baseFreqs[freqIndex]
     
-    partials.forEach(({ freq, gain }) => {
-      const osc = ctx.createOscillator()
-      const gainNode = ctx.createGain()
-      
-      // Sine wave for pure, calming tone
-      osc.type = 'sine'
-      osc.frequency.value = freq
-      
-      osc.connect(gainNode)
-      gainNode.connect(ctx.destination)
-      
-      // Gentle attack, long sustain - like a singing bowl
-      gainNode.gain.setValueAtTime(0, now)
-      gainNode.gain.linearRampToValueAtTime(gain, now + 0.05)
-      gainNode.gain.exponentialRampToValueAtTime(gain * 0.3, now + 0.8)
-      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 2.5)
-      
-      osc.start(now)
-      osc.stop(now + 2.5)
-    })
+    // SINGLE oscillator for clean, pure sound - MUCH QUIETER
+    const osc = ctx.createOscillator()
+    const gainNode = ctx.createGain()
+    
+    // Sine wave for pure, calming tone
+    osc.type = 'sine'
+    osc.frequency.value = fundamental
+    
+    osc.connect(gainNode)
+    gainNode.connect(ctx.destination)
+    
+    // Gentle attack, medium sustain - QUIETER (was 0.25)
+    gainNode.gain.setValueAtTime(0, now)
+    gainNode.gain.linearRampToValueAtTime(0.12, now + 0.05)
+    gainNode.gain.exponentialRampToValueAtTime(0.04, now + 0.6)
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.5)
+    
+    osc.start(now)
+    osc.stop(now + 1.5)
   } catch (error) {
     console.warn('Failed to play bong:', error)
   }

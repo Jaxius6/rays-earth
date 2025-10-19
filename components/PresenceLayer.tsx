@@ -69,7 +69,15 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
       } else {
         // Update existing point
         const material = point.material as THREE.MeshBasicMaterial
-        material.opacity = decay
+        
+        // For offline users: show at 10% minimum, then fade to 0% over 24h
+        let finalOpacity = decay
+        if (!presence.is_online) {
+          // Offline dots fade from 10% to 0% over 24 hours
+          finalOpacity = Math.max(0, 0.1 * decay)
+        }
+        
+        material.opacity = finalOpacity
         const color = presence.is_online ? 0xffffff : 0xffb300
         material.color.setHex(color)
         point.userData = { presence }

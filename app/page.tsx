@@ -24,12 +24,44 @@ const PingEngine = dynamic(() => import('@/components/PingEngine'), { ssr: false
 const AudioGate = dynamic(() => import('@/components/AudioGate'), { ssr: false })
 const AriaAnnouncer = dynamic(() => import('@/components/AriaAnnouncer'), { ssr: false })
 
-// Demo users for testing
+// Demo users for testing - mix of online and offline at various ages
+const now = new Date()
+const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 60 * 60 * 1000).toISOString()
+
 const DEMO_USERS: Presence[] = [
-  { id: 'demo-paris', lat: 48.86, lng: 2.35, last_active: new Date().toISOString(), is_online: true },
-  { id: 'demo-tokyo', lat: 35.68, lng: 139.69, last_active: new Date().toISOString(), is_online: true },
-  { id: 'demo-nyc', lat: 40.71, lng: -74.01, last_active: new Date().toISOString(), is_online: true },
-  { id: 'demo-sydney', lat: -33.87, lng: 151.21, last_active: new Date().toISOString(), is_online: true },
+  // 10 Online users
+  { id: 'demo-paris', lat: 48.86, lng: 2.35, last_active: now.toISOString(), is_online: true },
+  { id: 'demo-tokyo', lat: 35.68, lng: 139.69, last_active: now.toISOString(), is_online: true },
+  { id: 'demo-nyc', lat: 40.71, lng: -74.01, last_active: now.toISOString(), is_online: true },
+  { id: 'demo-sydney', lat: -33.87, lng: 151.21, last_active: now.toISOString(), is_online: true },
+  { id: 'demo-london', lat: 51.51, lng: -0.13, last_active: now.toISOString(), is_online: true },
+  { id: 'demo-berlin', lat: 52.52, lng: 13.40, last_active: now.toISOString(), is_online: true },
+  { id: 'demo-beijing', lat: 39.90, lng: 116.41, last_active: now.toISOString(), is_online: true },
+  { id: 'demo-mumbai', lat: 19.08, lng: 72.88, last_active: now.toISOString(), is_online: true },
+  { id: 'demo-saopaulo', lat: -23.55, lng: -46.63, last_active: now.toISOString(), is_online: true },
+  { id: 'demo-moscow', lat: 55.76, lng: 37.62, last_active: now.toISOString(), is_online: true },
+  
+  // 20 Offline users at varying fade stages
+  { id: 'demo-dubai', lat: 25.20, lng: 55.27, last_active: hoursAgo(1), is_online: false },
+  { id: 'demo-singapore', lat: 1.35, lng: 103.82, last_active: hoursAgo(2), is_online: false },
+  { id: 'demo-hongkong', lat: 22.32, lng: 114.17, last_active: hoursAgo(3), is_online: false },
+  { id: 'demo-toronto', lat: 43.65, lng: -79.38, last_active: hoursAgo(4), is_online: false },
+  { id: 'demo-mexico', lat: 19.43, lng: -99.13, last_active: hoursAgo(5), is_online: false },
+  { id: 'demo-cairo', lat: 30.04, lng: 31.24, last_active: hoursAgo(6), is_online: false },
+  { id: 'demo-istanbul', lat: 41.01, lng: 28.98, last_active: hoursAgo(8), is_online: false },
+  { id: 'demo-seoul', lat: 37.57, lng: 126.98, last_active: hoursAgo(10), is_online: false },
+  { id: 'demo-bangkok', lat: 13.76, lng: 100.50, last_active: hoursAgo(12), is_online: false },
+  { id: 'demo-madrid', lat: 40.42, lng: -3.70, last_active: hoursAgo(14), is_online: false },
+  { id: 'demo-rome', lat: 41.90, lng: 12.50, last_active: hoursAgo(15), is_online: false },
+  { id: 'demo-athens', lat: 37.98, lng: 23.73, last_active: hoursAgo(16), is_online: false },
+  { id: 'demo-stockholm', lat: 59.33, lng: 18.07, last_active: hoursAgo(17), is_online: false },
+  { id: 'demo-oslo', lat: 59.91, lng: 10.75, last_active: hoursAgo(18), is_online: false },
+  { id: 'demo-vienna', lat: 48.21, lng: 16.37, last_active: hoursAgo(19), is_online: false },
+  { id: 'demo-amsterdam', lat: 52.37, lng: 4.90, last_active: hoursAgo(20), is_online: false },
+  { id: 'demo-brussels', lat: 50.85, lng: 4.35, last_active: hoursAgo(21), is_online: false },
+  { id: 'demo-zurich', lat: 47.38, lng: 8.54, last_active: hoursAgo(22), is_online: false },
+  { id: 'demo-copenhagen', lat: 55.68, lng: 12.57, last_active: hoursAgo(23), is_online: false },
+  { id: 'demo-dublin', lat: 53.35, lng: -6.26, last_active: hoursAgo(23.5), is_online: false },
 ]
 
 export default function HomePage() {

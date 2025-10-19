@@ -15,12 +15,12 @@ interface PingEngineProps {
 
 interface PersistentArc {
   id: string
-  arc: THREE.Line
-  glowArc: THREE.Line
+  arc: THREE.Mesh | THREE.Line
+  glowArc: THREE.Mesh | THREE.Line
   createdAt: number
-  geometry: THREE.BufferGeometry
-  material: THREE.LineBasicMaterial
-  glowMaterial: THREE.LineBasicMaterial
+  geometry: THREE.BufferGeometry | THREE.TubeGeometry
+  material: THREE.MeshBasicMaterial | THREE.LineBasicMaterial
+  glowMaterial: THREE.MeshBasicMaterial | THREE.LineBasicMaterial
 }
 
 /**
@@ -65,10 +65,14 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
             whiteness
           )
           
-          arcData.material.opacity = opacity
-          arcData.material.color = color
-          arcData.glowMaterial.opacity = opacity * 0.3
-          arcData.glowMaterial.color = color
+          if ('color' in arcData.material) {
+            arcData.material.opacity = opacity
+            arcData.material.color = color
+          }
+          if ('color' in arcData.glowMaterial) {
+            arcData.glowMaterial.opacity = opacity * 0.3
+            arcData.glowMaterial.color = color
+          }
         }
       })
     }
@@ -126,26 +130,33 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
       const points = curve.getPoints(200)
       const geometry = new THREE.BufferGeometry().setFromPoints(points)
 
-      // MUCH thicker arc material with pulsing
-      const material = new THREE.LineBasicMaterial({
+      // ULTRA THICK arc - use tube geometry for actual thickness
+      const tubePath = new THREE.CatmullRomCurve3(positions, false, 'catmullrom', 0.5)
+      const tubeGeometry = new THREE.TubeGeometry(tubePath, 200, 2.5, 16, false) // 2.5 radius = 5 width!
+      
+      const tubeMaterial = new THREE.MeshBasicMaterial({
         color: 0xffb300,
         transparent: true,
         opacity: 0,
-        linewidth: 20, // VERY thick
       })
-
-      const arc = new THREE.Line(geometry, material)
+      
+      const arc = new THREE.Mesh(tubeGeometry, tubeMaterial)
       globe.add(arc)
       
-      // Even thicker glow layer for dramatic effect
-      const glowMaterial = new THREE.LineBasicMaterial({
+      // MASSIVE glow layer as second tube
+      const glowTubeGeometry = new THREE.TubeGeometry(tubePath, 200, 4, 16, false) // 4 radius = 8 width!
+      const glowMaterial = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
         opacity: 0,
-        linewidth: 35, // Massive glow
       })
-      const glowArc = new THREE.Line(geometry.clone(), glowMaterial)
+      
+      const glowArc = new THREE.Mesh(glowTubeGeometry, glowMaterial)
       globe.add(glowArc)
+      
+      // Store original geometry references for disposal
+      const arcGeometry = tubeGeometry
+      const glowGeometry = glowTubeGeometry
 
       // Check if involves current user
       const isFromMe = myPresence && 
@@ -211,7 +222,7 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
         }
       }
 
-      // Animation timeline - 5 SECOND travel
+      // Animation timeline - 5 SECOND ACTIVE DRAWING with pulsating magic glow
       const timeline = gsap.timeline({
         onComplete: () => {
           // Don't remove - keep arc persistent
@@ -223,8 +234,8 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
             arc,
             glowArc,
             createdAt: Date.now(),
-            geometry,
-            material,
+            geometry: arcGeometry,
+            material: tubeMaterial,
             glowMaterial,
           })
         },
@@ -233,55 +244,62 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
       // Start ripple at sender
       createRipple(ping.from_lat, ping.from_lng, 0, true)
 
-      // Fade in arc quickly
-      timeline.to(material, {
-        opacity: 0.9,
-        duration: 0.3,
-      })
-      
-      timeline.to(glowMaterial, {
-        opacity: 0.5,
-        duration: 0.3,
-      }, 0)
+      // ANIMATED DRAWING: Use morphTargets to reveal arc from A to B
+      // We'll animate the scale along the tube path
+      let drawProgress = 0
+      const animateDrawing = () => {
+        if (drawProgress >= 1) return
+        
+        drawProgress = Math.min(drawProgress + 0.0033, 1) // 5 seconds = 0.0033 per frame at 60fps
+        
+        // Scale the arc geometry to simulate drawing
+        const scaleY = drawProgress
+        arc.scale.set(1, scaleY, 1)
+        glowArc.scale.set(1, scaleY, 1)
+        
+        // Pulsating magic glow effect
+        const pulse = Math.sin(Date.now() * 0.01) * 0.15 + 0.85 // Oscillate 0.7-1.0
+        glowMaterial.opacity = Math.min(drawProgress, 0.7) * pulse
+        tubeMaterial.opacity = Math.min(drawProgress, 1.0)
+        
+        if (drawProgress < 1) {
+          requestAnimationFrame(animateDrawing)
+        }
+      }
 
-      // Arc travel - 5 SECONDS with ethereal hum
-      timeline.to(material, {
-        opacity: 1.0,
-        duration: 5,
-        ease: 'power1.inOut',
-        onStart: () => {
-          if (isFromMe || isToMe) playArcHum()
-        },
-      })
+      // Start the drawing animation and hum
+      if (isFromMe || isToMe) playArcHum()
+      requestAnimationFrame(animateDrawing)
       
-      // Pulsing glow during travel
-      timeline.to(glowMaterial, {
-        opacity: 0.8,
-        duration: 2.5,
-        yoyo: true,
-        repeat: 1,
-        ease: 'sine.inOut',
-      }, 0.3)
+      // After 5 seconds, start fading with continuous pulsation
+      setTimeout(() => {
+        // Continue pulsating even during fade
+        const pulsateInterval = setInterval(() => {
+          if (!persistentArcs.has(ping.id)) {
+            clearInterval(pulsateInterval)
+            return
+          }
+          const pulse = Math.sin(Date.now() * 0.008) * 0.1 + 0.9
+          const currentOpacity = tubeMaterial.opacity
+          glowMaterial.opacity = currentOpacity * 0.3 * pulse
+        }, 50)
+      }, 5000)
 
-      // After travel, fade to 10% over 10 seconds, transition to white
-      timeline.to(material, {
+      // After 5 second drawing, fade to 10% over 10 seconds, transition to white
+      timeline.to(tubeMaterial, {
         opacity: 0.1,
         duration: 10,
+        delay: 5,
         ease: 'power2.out',
       })
       
-      timeline.to(glowMaterial, {
-        opacity: 0.03,
-        duration: 10,
-        ease: 'power2.out',
-      }, '-=10')
-      
       // Transition color to white
-      timeline.to(material.color, {
+      timeline.to(tubeMaterial.color, {
         r: 1,
         g: 1,
         b: 1,
         duration: 10,
+        delay: 5,
       }, '-=10')
       
       timeline.to(glowMaterial.color, {
@@ -289,6 +307,7 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
         g: 1,
         b: 1,
         duration: 10,
+        delay: 5,
       }, '-=10')
 
       // End ripple at receiver with bong sound

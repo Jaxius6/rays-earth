@@ -138,19 +138,27 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     const autoRotateSpeed = 0.001
     const INACTIVITY_DELAY = 5000 // 5 seconds
 
-    // Function to center camera on specific coordinates
+    // Function to center camera on specific coordinates - USER'S POINT DEAD CENTER
     const centerOn = (lat: number, lng: number) => {
       // Convert lat/lng to rotation angles
-      const targetY = -(lng * Math.PI) / 180
-      const targetX = (lat * Math.PI) / 180
+      // Negative longitude to rotate globe correctly
+      // Flip latitude to center point facing camera
+      const targetY = (lng * Math.PI) / 180
+      const targetX = -(lat * Math.PI) / 180
+      
+      console.log(`Centering on user location: ${lat}, ${lng}`)
       
       // Smoothly animate to target
       gsap.to(targetRotation, {
         x: targetX,
         y: targetY,
-        duration: 2,
+        duration: 2.5,
         ease: 'power2.inOut',
+        onStart: () => {
+          console.log('Starting center animation')
+        },
         onComplete: () => {
+          console.log('Center animation complete - user location is now dead center')
           // Reset timer after centering animation completes
           lastInteractionTime = Date.now()
         }
