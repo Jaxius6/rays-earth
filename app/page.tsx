@@ -248,20 +248,22 @@ export default function HomePage() {
     }
   }, [myPresence, demoMode])
 
-  if (isLoading) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-b from-rays-bg-dark to-rays-bg-light">
+  return (
+    <>
+      {/* Loader overlay - hide with opacity when done */}
+      <div
+        className="fixed inset-0 flex items-center justify-center bg-gradient-to-b from-rays-bg-dark to-rays-bg-light transition-opacity duration-500 pointer-events-none z-50"
+        style={{ opacity: isLoading ? 1 : 0 }}
+      >
         <div className="text-center">
           <div className="w-12 h-12 border-2 border-rays-amber border-t-transparent rounded-full spinner mx-auto mb-4" />
           <p className="sr-only">Loading rays.earth...</p>
         </div>
       </div>
-    )
-  }
 
-  return (
-    <main className="fixed inset-0 overflow-hidden">
-      <GlobeCanvas onGlobeReady={handleGlobeReady} />
+      {/* Main content - always rendered */}
+      <main className="fixed inset-0 overflow-hidden">
+        <GlobeCanvas onGlobeReady={handleGlobeReady} />
       
       {globe && (
         <>
@@ -281,6 +283,7 @@ export default function HomePage() {
 
       <AudioGate />
       <AriaAnnouncer />
-    </main>
+      </main>
+    </>
   )
 }
