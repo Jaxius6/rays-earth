@@ -49,20 +49,20 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
       if (!point) {
         const position = latLngToVector3(presence.lat, presence.lng, globeRadius + 2)
         
-        // Create point geometry
-        const geometry = new THREE.SphereGeometry(1.5, 16, 16)
+        // Smaller geometry for offline users
+        const size = presence.is_online ? 1.5 : 1.0
+        const geometry = new THREE.SphereGeometry(size, 16, 16)
         
-        // Different color for online vs offline
-        const color = presence.is_online ? 0xffffff : 0xffb300
+        // Both online and offline are WHITE - just different opacity
         const material = new THREE.MeshBasicMaterial({
-          color,
+          color: 0xffffff,
           transparent: true,
-          opacity: decay,
+          opacity: presence.is_online ? decay : 0.1, // Offline starts at 10%
         })
         
         point = new THREE.Mesh(geometry, material)
         point.position.set(position.x, position.y, position.z)
-        point.userData = { presence }
+        point.userData = { presence, isClickable: presence.is_online }
         
         globe.add(point)
         existingPoints.set(presence.id, point)
@@ -70,21 +70,21 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
         // Update existing point
         const material = point.material as THREE.MeshBasicMaterial
         
-        // For offline users: show at 10% minimum, then fade to 0% over 24h
-        let finalOpacity = decay
-        if (!presence.is_online) {
-          // Offline dots fade from 10% to 0% over 24 hours
-          finalOpacity = Math.max(0, 0.1 * decay)
-        }
+        // Online users: full decay, Offline users: 10% max, fading to 0%
+        let finalOpacity = presence.is_online ? decay : Math.max(0, 0.1 * decay)
         
         material.opacity = finalOpacity
-        const color = presence.is_online ? 0xffffff : 0xffb300
-        material.color.setHex(color)
-        point.userData = { presence }
+        material.color.setHex(0xffffff) // Always white
+        point.userData = { presence, isClickable: presence.is_online }
         
-        // Apply subtle hover scale
-        const isHovered = hoveredId === presence.id
-        point.scale.set(isHovered ? 1.3 : 1, isHovered ? 1.3 : 1, isHovered ? 1.3 : 1)
+        // Apply subtle hover scale ONLY if online (clickable)
+        const isHovered = hoveredId === presence.id && presence.is_online
+        const baseScale = presence.is_online ? 1 : 0.67 // Smaller offline dots
+        point.scale.set(
+          isHovered ? baseScale * 1.3 : baseScale,
+          isHovered ? baseScale * 1.3 : baseScale,
+          isHovered ? baseScale * 1.3 : baseScale
+        )
       }
     })
 
@@ -119,8 +119,10 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
       if (intersects.length > 0) {
         const clickedPoint = intersects[0].object as THREE.Mesh
         const presence = clickedPoint.userData.presence as Presence
+        const isClickable = clickedPoint.userData.isClickable as boolean
         
-        if (hoveredId !== presence.id) {
+        // Only show hover effects for clickable (online) users
+        if (isClickable && hoveredId !== presence.id) {
           setHoveredId(presence.id)
           
           // Create beautiful warping ripple on hover
@@ -209,8 +211,15 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
       if (intersects.length > 0) {
         const clickedPoint = intersects[0].object as THREE.Mesh
         const presence = clickedPoint.userData.presence as Presence
-        console.log('Presence clicked!', presence)
-        onPresenceClick(presence)
+        const isClickable = clickedPoint.userData.isClickable as boolean
+        
+        // Only trigger click if user is online (clickable)
+        if (isClickable) {
+          console.log('Presence clicked!', presence)
+          onPresenceClick(presence)
+        } else {
+          console.log('Offline user clicked - ignoring')
+        }
       }
     }
 

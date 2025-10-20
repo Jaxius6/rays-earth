@@ -112,15 +112,26 @@ export function playBong() {
     const ctx = audioContext!
     const now = ctx.currentTime
     
-    // Reset counter after 10 seconds of no bongs
-    if (Date.now() - lastBongTime > 10000) {
+    // Reset counter after 5 seconds of no bongs
+    if (Date.now() - lastBongTime > 5000) {
       bongClickCount = 0
     }
     bongClickCount++
     lastBongTime = Date.now()
     
-    // Base frequencies for harmonic progression (pentatonic scale)
-    const baseFreqs = [196, 220, 247, 294, 330] // G3, A3, B3, D4, E4
+    // Extended harmonic progression - lower start, higher end
+    const baseFreqs = [
+      110, // A2 - very low
+      147, // D3
+      165, // E3
+      196, // G3
+      220, // A3
+      247, // B3
+      294, // D4
+      330, // E4
+      392, // G4
+      440  // A4 - high
+    ]
     const freqIndex = Math.min(bongClickCount - 1, baseFreqs.length - 1)
     const fundamental = baseFreqs[freqIndex]
     

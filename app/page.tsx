@@ -83,15 +83,14 @@ export default function HomePage() {
     initializeAudio()
   }, [])
 
-  // Request geolocation AFTER globe is ready
+  // SEQUENCED LOAD: Earth → My Dot → Center → Other Dots → Rotate
   useEffect(() => {
     if (!globe || globeLoading) return
     
-    console.log('Starting geolocation and data fetch...')
+    console.log('🌍 Step 1: Globe loaded')
     
     const init = async () => {
       try {
-        // Check if Supabase is configured (non-empty values)
         const hasSupabase =
           process.env.NEXT_PUBLIC_SUPABASE_URL &&
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
@@ -99,7 +98,8 @@ export default function HomePage() {
           process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.trim() !== ''
 
         if (hasSupabase) {
-          // NOW request geolocation after globe is visible
+          // STEP 2: Request geolocation and show MY dot
+          console.log('📍 Step 2: Requesting location...')
           const position = await requestGeolocation()
           
           if (position) {
@@ -108,39 +108,48 @@ export default function HomePage() {
               position.coords.longitude
             )
 
-            // Upsert presence
+            // Create MY presence
             const presence = await upsertPresence(lat, lng)
             setMyPresence(presence)
+            console.log('✨ Step 2.5: MY dot created at', lat, lng)
             
-            // Center globe on user's location
+            // Wait a moment to see my dot
+            await new Promise(resolve => setTimeout(resolve, 500))
+            
+            // STEP 3: Center on MY location
+            console.log('🎯 Step 3: Centering on MY location...')
             if (globeControlsRef.current) {
               globeControlsRef.current.centerOn(lat, lng)
             }
             
             announce(`Connected to rays.earth at ${lat.toFixed(2)}, ${lng.toFixed(2)}`)
+            
+            // Wait for centering animation to complete
+            await new Promise(resolve => setTimeout(resolve, 2500))
           } else {
             announce('Connected to rays.earth. Viewing global presence.')
           }
 
-          // Fetch initial presences
+          // STEP 4: Load OTHER dots
+          console.log('👥 Step 4: Loading other users...')
           const initialPresences = await getRecentPresences()
-          
-          // ALWAYS add demo users for testing pings
           const allPresences = [...initialPresences, ...DEMO_USERS]
           setPresences(allPresences)
           setDemoMode(true)
           
-          console.log(`Loaded ${initialPresences.length} real users + ${DEMO_USERS.length} demo users`)
-          announce(`${allPresences.length} users visible (${DEMO_USERS.length} demo for testing)`)
+          console.log(`✅ Loaded ${initialPresences.length} real + ${DEMO_USERS.length} demo users`)
+          announce(`${allPresences.length} users visible`)
+          
+          // STEP 5: Auto-rotation will start after 5s inactivity (handled by GlobeCanvas)
+          console.log('⏳ Step 5: Auto-rotation starts after 5s inactivity')
         } else {
-          console.warn('Supabase not configured - showing globe with demo users')
+          console.warn('Supabase not configured - showing demo users')
           setPresences(DEMO_USERS)
           setDemoMode(true)
           announce('Viewing rays.earth globe with demo users')
         }
       } catch (error) {
         console.error('Initialization error:', error)
-        // Show demo users on error
         setPresences(DEMO_USERS)
         setDemoMode(true)
         announce('Showing globe with demo users')
@@ -247,38 +256,38 @@ export default function HomePage() {
 
     console.log('Clicked presence:', presence)
 
-    // Always create local ping animation for instant feedback
-    const demoPing: Ping = {
-      id: `demo-${Date.now()}`,
-      from_lat: myPresence?.lat || presence.lat,
-      from_lng: myPresence?.lng || presence.lng,
-      to_lat: presence.lat,
-      to_lng: presence.lng,
-      created_at: new Date().toISOString(),
-    }
-    
-    setPings((prev) => [...prev, demoPing])
-    setTimeout(() => {
-      setPings((prev) => prev.filter((p) => p.id !== demoPing.id))
-    }, 3000)
-    
-    announce('Ping sent')
-
-    // Also try to send real ping if we have a presence
-    if (!myPresence) return
-
-    try {
-      await emitPing(
-        myPresence.lat,
-        myPresence.lng,
-        presence.lat,
-        presence.lng
-      )
+    // If we have myPresence, send real ping (which will broadcast and create arc)
+    if (myPresence) {
+      try {
+        await emitPing(
+          myPresence.lat,
+          myPresence.lng,
+          presence.lat,
+          presence.lng
+        )
+        announce('Ping sent')
+      } catch (error) {
+        console.error('Failed to send ping:', error)
+      }
+    } else {
+      // No myPresence - create local demo ping only
+      const demoPing: Ping = {
+        id: `demo-${Date.now()}`,
+        from_lat: presence.lat,
+        from_lng: presence.lng,
+        to_lat: presence.lat,
+        to_lng: presence.lng,
+        created_at: new Date().toISOString(),
+      }
+      
+      setPings((prev) => [...prev, demoPing])
+      setTimeout(() => {
+        setPings((prev) => prev.filter((p) => p.id !== demoPing.id))
+      }, 3000)
+      
       announce('Ping sent')
-    } catch (error) {
-      console.error('Failed to send ping:', error)
     }
-  }, [myPresence, demoMode])
+  }, [myPresence])
 
   return (
     <>
