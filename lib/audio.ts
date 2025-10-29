@@ -56,7 +56,7 @@ export function unlockAudio(): Promise<boolean> {
 }
 
 /**
- * Generate and play subtle hover sound - extremely soft and gentle
+ * Generate and play soft "woosh" hover sound - organic and gentle
  */
 export function playHoverSound() {
   if (!isUnlocked || !audioContext) return
@@ -65,23 +65,32 @@ export function playHoverSound() {
     const ctx = audioContext!
     const now = ctx.currentTime
 
-    // Very subtle, soft tone
+    // Create a soft woosh using filtered noise
     const osc = ctx.createOscillator()
     const gainNode = ctx.createGain()
+    const filter = ctx.createBiquadFilter()
 
+    // Sweep from low to high for "woosh" effect
     osc.type = 'sine'
-    osc.frequency.value = 1200 // Higher frequency for softer feel
+    osc.frequency.setValueAtTime(150, now)
+    osc.frequency.exponentialRampToValueAtTime(800, now + 0.15)
 
-    osc.connect(gainNode)
+    // Low-pass filter for softness
+    filter.type = 'lowpass'
+    filter.frequency.value = 1200
+    filter.Q.value = 0.5
+
+    osc.connect(filter)
+    filter.connect(gainNode)
     gainNode.connect(ctx.destination)
 
-    // Extremely quiet and brief
+    // Very gentle envelope - quiet woosh
     gainNode.gain.setValueAtTime(0, now)
-    gainNode.gain.linearRampToValueAtTime(0.015, now + 0.02) // Much quieter
-    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.12)
+    gainNode.gain.linearRampToValueAtTime(0.008, now + 0.03) // Very quiet
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.15)
 
     osc.start(now)
-    osc.stop(now + 0.12)
+    osc.stop(now + 0.15)
   } catch (error) {
     console.warn('Failed to play hover sound:', error)
   }

@@ -3,7 +3,9 @@
     "allow": [
       "Bash(git add:*)",
       "Bash(git commit -m \"$(cat <<''EOF''\nRefactor and enhance rays-earth project codebase\n\nMajor updates across components, backend functions, and configuration files including:\n- Enhanced globe visualization with improved shaders and animations\n- Refined audio system and presence layer interactions\n- Updated Supabase functions and database schema\n- Improved testing infrastructure and configuration\n- Documentation and deployment guide updates\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nMajor visual and interaction improvements\n\nVisual Quality Enhancements:\n- Increased globe brightness (shader multiplier 3.5x)\n- Enhanced starfield: 5000 stars with varied sizes and subtle colors\n- Higher resolution Earth sphere (128x128 polygons)\n- Better rendering: ACES tone mapping, 3x pixel ratio\n- Improved lighting with StandardMaterial\n\nInteraction Fixes:\n- Fixed auto-center rotation to user''s actual location\n- Added mouse wheel zoom (200-450 range, prevents going behind stars)\n- Slower, heavier drag rotation (0.002 speed for massive globe feel)\n- Fixed mobile camera distance (now 400 units, was too close at 250)\n- Slower auto-spin speed (0.0005)\n\nActive Dot Improvements:\n- Smaller dots (0.8 radius) with glowing emissive material\n- Continuous breathing animation via separate RAF loop\n- Fixed hover bug where all dots changed size\n- Softer, more subtle hover sound (1200Hz, 0.015 gain)\n\nDocumentation:\n- Added ARCS.md with complete arc animation breakdown\n- Updated CLAUDE.md with all new features and troubleshooting\n- Added 70 more demo presences (30 active, 70 dormant)\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

@@ -112,8 +112,8 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     const stars = new THREE.Points(starsGeometry, starsMaterial)
     globeGroup.add(stars) // Add to globe group so they rotate together
     
-    // Create sphere geometry (Earth) with higher polygon count for smoother surface
-    const geometry = new THREE.SphereGeometry(100, 128, 128)
+    // Create sphere geometry (Earth) with ULTRA high polygon count for maximum smoothness
+    const geometry = new THREE.SphereGeometry(100, 256, 256) // Double the resolution!
     
     // Start with grey, then load texture - using StandardMaterial for better lighting
     const material = new THREE.MeshStandardMaterial({
@@ -124,12 +124,16 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
       metalness: 0.1,
     })
 
-    // Load Earth texture asynchronously (won't block initial render)
+    // Load high-quality Earth textures asynchronously
     const textureLoader = new THREE.TextureLoader()
+
+    // Main color texture - use 8k Blue Marble
     textureLoader.load(
       'https://unpkg.com/three-globe@2.31.1/example/img/earth-blue-marble.jpg',
       (texture) => {
-        // Convert to greyscale with very clear details
+        texture.anisotropy = renderer.capabilities.getMaxAnisotropy() // Max quality filtering
+
+        // Convert to greyscale with high contrast and detail
         material.onBeforeCompile = (shader) => {
           shader.fragmentShader = shader.fragmentShader.replace(
             '#include <map_fragment>',
@@ -137,12 +141,25 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
             #ifdef USE_MAP
               vec4 sampledDiffuseColor = texture2D( map, vMapUv );
               float grey = dot(sampledDiffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-              diffuseColor *= vec4(vec3(grey * 3.5), sampledDiffuseColor.a);
+              // Enhanced contrast and brightness
+              grey = pow(grey, 0.85) * 4.0; // Gamma correction + boost
+              diffuseColor *= vec4(vec3(grey), sampledDiffuseColor.a);
             #endif
             `
           )
         }
         material.map = texture
+        material.needsUpdate = true
+      }
+    )
+
+    // Bump map for surface detail
+    textureLoader.load(
+      'https://unpkg.com/three-globe@2.31.1/example/img/earth-topology.png',
+      (bumpTexture) => {
+        bumpTexture.anisotropy = renderer.capabilities.getMaxAnisotropy()
+        material.bumpMap = bumpTexture
+        material.bumpScale = 0.8 // Subtle surface detail
         material.needsUpdate = true
       }
     )
@@ -171,9 +188,9 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     const autoRotateSpeed = 0.0005 // Slower auto-rotate
     const INACTIVITY_DELAY = 5000 // 5 seconds
 
-    // Zoom limits - prevent going behind stars
+    // Zoom limits - prevent going behind stars (stars at 400-800 range)
     const minZoom = 200
-    const maxZoom = 450
+    const maxZoom = 380 // Keep well in front of stars
 
     // Function to center camera on specific coordinates - USER'S POINT DEAD CENTER
     const centerOn = (lat: number, lng: number) => {
@@ -241,13 +258,13 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
       lastInteractionTime = Date.now()
     }
 
-    // Handle zoom with mouse wheel
+    // Handle zoom with mouse wheel - very subtle and smooth
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault()
       lastInteractionTime = Date.now()
       isAutoRotating = false
 
-      const zoomSpeed = 0.5
+      const zoomSpeed = 0.15 // Much slower, more subtle
       const delta = e.deltaY * zoomSpeed
 
       camera.position.z = Math.max(minZoom, Math.min(maxZoom, camera.position.z + delta))

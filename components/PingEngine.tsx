@@ -104,9 +104,9 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
         100
       )
 
-      // Get exact start and end positions (matching presence dots at globeRadius + 2)
-      const startPos = latLngToVector3(ping.from_lat, ping.from_lng, globeRadius + 2)
-      const endPos = latLngToVector3(ping.to_lat, ping.to_lng, globeRadius + 2)
+      // Get exact start and end positions (matching presence dots at globeRadius)
+      const startPos = latLngToVector3(ping.from_lat, ping.from_lng, globeRadius)
+      const endPos = latLngToVector3(ping.to_lat, ping.to_lng, globeRadius)
 
       // Make arc loop higher above globe, but START and END at exact dot positions
       const positions: THREE.Vector3[] = arcPoints.map((point, index) => {
@@ -121,7 +121,7 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
         } else {
           // Middle points: arc high above globe
           const heightBoost = Math.sin(t * Math.PI) * 60 // Peak height - 60 units
-          const pos = latLngToVector3(point.lat, point.lng, globeRadius + 2 + heightBoost)
+          const pos = latLngToVector3(point.lat, point.lng, globeRadius + heightBoost)
           return new THREE.Vector3(pos.x, pos.y, pos.z)
         }
       })
@@ -192,7 +192,7 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
 
       // Beautiful warping ripple creation
       const createRipple = (lat: number, lng: number, delay: number, isSender: boolean) => {
-        const pos = latLngToVector3(lat, lng, globeRadius + 2.5)
+        const pos = latLngToVector3(lat, lng, globeRadius + 0.5)
         
         // Create multiple concentric ripples for depth
         for (let i = 0; i < 3; i++) {

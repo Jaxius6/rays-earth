@@ -49,10 +49,10 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
 
       // Create new point if doesn't exist
       if (!point) {
-        const position = latLngToVector3(presence.lat, presence.lng, globeRadius + 2)
+        const position = latLngToVector3(presence.lat, presence.lng, globeRadius)
 
         // Smaller dots - online dots are tiny but glow
-        const size = presence.is_online ? 0.8 : 0.6
+        const size = presence.is_online ? 0.6 : 0.5
         const geometry = new THREE.SphereGeometry(size, 16, 16)
 
         // Online dots glow with emissive material
@@ -93,17 +93,7 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
 
         point.userData = { presence, isClickable: presence.is_online }
 
-        // NO automatic pulsing - only on hover
-        // Keep dots at base scale unless hovered
-        const isHovered = hoveredId === presence.id
-        if (presence.is_online) {
-          const baseScale = 1.0
-          point.scale.set(baseScale, baseScale, baseScale)
-        } else {
-          // Static scale for offline dots
-          const baseScale = 0.67
-          point.scale.set(baseScale, baseScale, baseScale)
-        }
+        // Scale handled by breathing animation - don't reset here
       }
     })
 
@@ -262,26 +252,63 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
       }
     }
 
-    // Continuous breathing animation for active dots
-    const animateBreathing = () => {
+    // Continuous heartbeat animation for active dots
+    const animateHeartbeat = () => {
       const time = Date.now() * 0.001
-      const breathe = 0.85 + Math.sin(time * 1.5) * 0.15 // Subtle breathing 0.7-1.0
+      // Heartbeat pattern: double pulse with pause (like a real heartbeat)
+      const heartbeatCycle = time % 2.0 // 2 second cycle
+      let pulse
+
+      if (heartbeatCycle < 0.3) {
+        // First beat
+        pulse = Math.sin((heartbeatCycle / 0.3) * Math.PI)
+      } else if (heartbeatCycle < 0.5) {
+        // Short pause
+        pulse = 0
+      } else if (heartbeatCycle < 0.8) {
+        // Second beat
+        pulse = Math.sin(((heartbeatCycle - 0.5) / 0.3) * Math.PI) * 0.7 // Slightly weaker
+      } else {
+        // Long pause
+        pulse = 0
+      }
 
       existingPoints.forEach((point, id) => {
         const presence = point.userData.presence as Presence
-        if (!presence || !presence.is_online) return
+        if (!presence) return
 
-        const material = point.material as THREE.MeshStandardMaterial
-        if ('emissiveIntensity' in material) {
-          // Breathing glow effect
-          material.emissiveIntensity = 1.5 + breathe * 0.8
+        const isHovered = hoveredId === presence.id
+
+        if (presence.is_online) {
+          const material = point.material as THREE.MeshStandardMaterial
+
+          if (isHovered) {
+            // Hovered: stay large and bright
+            point.scale.set(1.5, 1.5, 1.5)
+            if ('emissiveIntensity' in material) {
+              material.emissiveIntensity = 3.0
+            }
+          } else {
+            // Not hovered: heartbeat pulsation
+            const scaleAmount = 0.8 + pulse * 0.35 // 0.8 to 1.15
+            point.scale.set(scaleAmount, scaleAmount, scaleAmount)
+
+            // Glow intensity follows heartbeat
+            if ('emissiveIntensity' in material) {
+              material.emissiveIntensity = 1.5 + pulse * 1.5
+            }
+          }
+        } else {
+          // Offline dots: static
+          const baseScale = 0.6
+          point.scale.set(baseScale, baseScale, baseScale)
         }
       })
 
-      breathingAnimationRef.current = requestAnimationFrame(animateBreathing)
+      breathingAnimationRef.current = requestAnimationFrame(animateHeartbeat)
     }
 
-    breathingAnimationRef.current = requestAnimationFrame(animateBreathing)
+    breathingAnimationRef.current = requestAnimationFrame(animateHeartbeat)
 
     return () => {
       cancelAnimationFrame(breathingAnimationRef.current)
