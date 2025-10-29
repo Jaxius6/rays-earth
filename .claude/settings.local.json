@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nRefactor and enhance rays-earth project codebase\n\nMajor updates across components, backend functions, and configuration files including:\n- Enhanced globe visualization with improved shaders and animations\n- Refined audio system and presence layer interactions\n- Updated Supabase functions and database schema\n- Improved testing infrastructure and configuration\n- Documentation and deployment guide updates\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

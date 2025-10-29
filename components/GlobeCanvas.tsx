@@ -35,60 +35,93 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     // Camera setup - adjust for mobile
     const isMobile = width < 768
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000)
-    camera.position.z = isMobile ? 250 : 300 // Closer on mobile
+    camera.position.z = isMobile ? 400 : 300 // Further away on mobile for better view
     cameraRef.current = camera
     scene.add(camera) // ADD CAMERA TO SCENE - CRITICAL!
 
-    // Renderer setup
-    const renderer = new THREE.WebGLRenderer({ 
+    // Renderer setup with higher quality settings
+    const renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: false,
       powerPreference: 'high-performance'
     })
     renderer.setSize(width, height)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 3)) // Higher pixel ratio for sharper rendering
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.2
     container.appendChild(renderer.domElement)
     rendererRef.current = renderer
 
     // Create globe group (will contain Earth AND stars)
     const globeGroup = new THREE.Group()
     
-    // Add subtle starfield that rotates with globe
+    // Enhanced starfield with varying sizes and subtle color
     const starsGeometry = new THREE.BufferGeometry()
-    const starCount = 3000
+    const starCount = 5000 // More stars for denser field
     const positions = new Float32Array(starCount * 3)
-    
-    for (let i = 0; i < starCount * 3; i += 3) {
+    const sizes = new Float32Array(starCount)
+    const colors = new Float32Array(starCount * 3)
+
+    for (let i = 0; i < starCount; i++) {
       // Random position in sphere - closer and within camera range
-      const radius = 400 + Math.random() * 300 // 400-700 units away
+      const radius = 400 + Math.random() * 400 // 400-800 units away
       const theta = Math.random() * Math.PI * 2
       const phi = Math.acos(Math.random() * 2 - 1)
-      
-      positions[i] = radius * Math.sin(phi) * Math.cos(theta)
-      positions[i + 1] = radius * Math.sin(phi) * Math.sin(theta)
-      positions[i + 2] = radius * Math.cos(phi)
+
+      const i3 = i * 3
+      positions[i3] = radius * Math.sin(phi) * Math.cos(theta)
+      positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta)
+      positions[i3 + 2] = radius * Math.cos(phi)
+
+      // Varied star sizes - some tiny, some larger
+      sizes[i] = Math.random() * 3 + 0.5 // 0.5-3.5 size range
+
+      // Subtle warm/cool color variation
+      const temp = Math.random()
+      if (temp > 0.95) {
+        // 5% blue-white stars
+        colors[i3] = 0.9 + Math.random() * 0.1
+        colors[i3 + 1] = 0.95 + Math.random() * 0.05
+        colors[i3 + 2] = 1.0
+      } else if (temp < 0.05) {
+        // 5% warm orange stars
+        colors[i3] = 1.0
+        colors[i3 + 1] = 0.8 + Math.random() * 0.2
+        colors[i3 + 2] = 0.7 + Math.random() * 0.2
+      } else {
+        // 90% white stars
+        colors[i3] = 1.0
+        colors[i3 + 1] = 1.0
+        colors[i3 + 2] = 1.0
+      }
     }
-    
+
     starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+    starsGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1))
+    starsGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+
     const starsMaterial = new THREE.PointsMaterial({
-      color: 0xffffff,
-      size: 1.2, // More visible stars
+      size: 1.5,
       transparent: true,
-      opacity: 0.8, // Brighter
-      sizeAttenuation: false,
+      opacity: 1.0,
+      sizeAttenuation: true, // Stars get smaller with distance
+      vertexColors: true, // Use individual star colors
+      blending: THREE.AdditiveBlending, // Additive blending for glow effect
     })
-    
+
     const stars = new THREE.Points(starsGeometry, starsMaterial)
     globeGroup.add(stars) // Add to globe group so they rotate together
     
-    // Create sphere geometry (Earth)
-    const geometry = new THREE.SphereGeometry(100, 48, 48)
+    // Create sphere geometry (Earth) with higher polygon count for smoother surface
+    const geometry = new THREE.SphereGeometry(100, 128, 128)
     
-    // Start with grey, then load texture
-    const material = new THREE.MeshPhongMaterial({
+    // Start with grey, then load texture - using StandardMaterial for better lighting
+    const material = new THREE.MeshStandardMaterial({
       color: 0x444444,
       emissive: 0x111111,
-      shininess: 5,
+      emissiveIntensity: 0.2,
+      roughness: 0.9,
+      metalness: 0.1,
     })
 
     // Load Earth texture asynchronously (won't block initial render)
@@ -104,7 +137,7 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
             #ifdef USE_MAP
               vec4 sampledDiffuseColor = texture2D( map, vMapUv );
               float grey = dot(sampledDiffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-              diffuseColor *= vec4(vec3(grey * 1.8), sampledDiffuseColor.a);
+              diffuseColor *= vec4(vec3(grey * 3.5), sampledDiffuseColor.a);
             #endif
             `
           )
@@ -118,10 +151,10 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     globeGroup.add(sphere)
 
     // Add lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.9)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.5)
     scene.add(ambientLight)
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6)
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0)
     directionalLight.position.set(5, 3, 5)
     scene.add(directionalLight)
 
@@ -135,16 +168,19 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     let targetRotation = { x: 0, y: 0 }
     let lastInteractionTime = Date.now()
     let isAutoRotating = false
-    const autoRotateSpeed = 0.001
+    const autoRotateSpeed = 0.0005 // Slower auto-rotate
     const INACTIVITY_DELAY = 5000 // 5 seconds
+
+    // Zoom limits - prevent going behind stars
+    const minZoom = 200
+    const maxZoom = 450
 
     // Function to center camera on specific coordinates - USER'S POINT DEAD CENTER
     const centerOn = (lat: number, lng: number) => {
       // Convert lat/lng to rotation angles
-      // Negative longitude to rotate globe correctly
-      // Flip latitude to center point facing camera
-      const targetY = (lng * Math.PI) / 180
-      const targetX = -(lat * Math.PI) / 180
+      // Globe rotates OPPOSITE to bring point forward
+      const targetY = -lng * (Math.PI / 180)  // Longitude: rotate opposite direction
+      const targetX = -lat * (Math.PI / 180)  // Latitude: tilt opposite direction
       
       console.log(`Centering on user location: ${lat}, ${lng}`)
       
@@ -192,8 +228,9 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
       const deltaX = clientX - previousMousePosition.x
       const deltaY = clientY - previousMousePosition.y
 
-      targetRotation.y += deltaX * 0.005
-      targetRotation.x += deltaY * 0.005
+      // Slower, heavier rotation for massive globe feel
+      targetRotation.y += deltaX * 0.002
+      targetRotation.x += deltaY * 0.002
       targetRotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, targetRotation.x))
 
       previousMousePosition = { x: clientX, y: clientY }
@@ -204,6 +241,18 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
       lastInteractionTime = Date.now()
     }
 
+    // Handle zoom with mouse wheel
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      lastInteractionTime = Date.now()
+      isAutoRotating = false
+
+      const zoomSpeed = 0.5
+      const delta = e.deltaY * zoomSpeed
+
+      camera.position.z = Math.max(minZoom, Math.min(maxZoom, camera.position.z + delta))
+    }
+
     // Add event listeners
     container.addEventListener('mousedown', handlePointerDown)
     container.addEventListener('mousemove', handlePointerMove)
@@ -211,6 +260,7 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     container.addEventListener('touchstart', handlePointerDown, { passive: true })
     container.addEventListener('touchmove', handlePointerMove, { passive: true })
     container.addEventListener('touchend', handlePointerUp)
+    container.addEventListener('wheel', handleWheel, { passive: false })
 
     // Animation loop
     const animate = () => {
@@ -257,6 +307,7 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
       container.removeEventListener('touchstart', handlePointerDown)
       container.removeEventListener('touchmove', handlePointerMove)
       container.removeEventListener('touchend', handlePointerUp)
+      container.removeEventListener('wheel', handleWheel)
       
       if (renderer) {
         renderer.dispose()

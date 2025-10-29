@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { Presence } from '@/lib/supabase-browser'
 import { calculateDecay, latLngToVector3 } from '@/lib/geo'
+import { playHoverSound } from '@/lib/audio'
 
 interface PresenceLayerProps {
   globe: THREE.Group
@@ -22,6 +23,7 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const hoverRippleRef = useRef<THREE.Mesh | null>(null)
   const animationFrameRef = useRef<number>(0)
+  const breathingAnimationRef = useRef<number>(0)
 
   useEffect(() => {
     if (!globe) return
@@ -48,43 +50,60 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
       // Create new point if doesn't exist
       if (!point) {
         const position = latLngToVector3(presence.lat, presence.lng, globeRadius + 2)
-        
-        // Smaller geometry for offline users
-        const size = presence.is_online ? 1.5 : 1.0
+
+        // Smaller dots - online dots are tiny but glow
+        const size = presence.is_online ? 0.8 : 0.6
         const geometry = new THREE.SphereGeometry(size, 16, 16)
-        
-        // Both online and offline are WHITE - just different opacity
-        const material = new THREE.MeshBasicMaterial({
-          color: 0xffffff,
-          transparent: true,
-          opacity: presence.is_online ? decay : 0.1, // Offline starts at 10%
-        })
-        
+
+        // Online dots glow with emissive material
+        const material = presence.is_online
+          ? new THREE.MeshStandardMaterial({
+              color: 0xffffff,
+              emissive: 0xffffff,
+              emissiveIntensity: 2.0,
+              transparent: true,
+              opacity: decay,
+            })
+          : new THREE.MeshBasicMaterial({
+              color: 0xffffff,
+              transparent: true,
+              opacity: 0.1, // Offline starts at 10%
+            })
+
         point = new THREE.Mesh(geometry, material)
         point.position.set(position.x, position.y, position.z)
-        point.userData = { presence, isClickable: presence.is_online }
+        point.userData = { presence, isClickable: presence.is_online, startTime: Date.now() }
         
         globe.add(point)
         existingPoints.set(presence.id, point)
       } else {
         // Update existing point
-        const material = point.material as THREE.MeshBasicMaterial
-        
+        const material = point.material as THREE.MeshBasicMaterial | THREE.MeshStandardMaterial
+
         // Online users: full decay, Offline users: 10% max, fading to 0%
         let finalOpacity = presence.is_online ? decay : Math.max(0, 0.1 * decay)
-        
+
         material.opacity = finalOpacity
         material.color.setHex(0xffffff) // Always white
+
+        // Update emissive for online dots
+        if (presence.is_online && 'emissive' in material) {
+          material.emissiveIntensity = 2.0
+        }
+
         point.userData = { presence, isClickable: presence.is_online }
-        
-        // Apply subtle hover scale ONLY if online (clickable)
-        const isHovered = hoveredId === presence.id && presence.is_online
-        const baseScale = presence.is_online ? 1 : 0.67 // Smaller offline dots
-        point.scale.set(
-          isHovered ? baseScale * 1.3 : baseScale,
-          isHovered ? baseScale * 1.3 : baseScale,
-          isHovered ? baseScale * 1.3 : baseScale
-        )
+
+        // NO automatic pulsing - only on hover
+        // Keep dots at base scale unless hovered
+        const isHovered = hoveredId === presence.id
+        if (presence.is_online) {
+          const baseScale = 1.0
+          point.scale.set(baseScale, baseScale, baseScale)
+        } else {
+          // Static scale for offline dots
+          const baseScale = 0.67
+          point.scale.set(baseScale, baseScale, baseScale)
+        }
       }
     })
 
@@ -124,6 +143,7 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
         // Only show hover effects for clickable (online) users
         if (isClickable && hoveredId !== presence.id) {
           setHoveredId(presence.id)
+          playHoverSound()
           
           // Create beautiful warping ripple on hover
           if (hoverRippleRef.current) {
@@ -240,6 +260,31 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
         ;(hoverRippleRef.current.material as THREE.Material).dispose()
         hoverRippleRef.current = null
       }
+    }
+
+    // Continuous breathing animation for active dots
+    const animateBreathing = () => {
+      const time = Date.now() * 0.001
+      const breathe = 0.85 + Math.sin(time * 1.5) * 0.15 // Subtle breathing 0.7-1.0
+
+      existingPoints.forEach((point, id) => {
+        const presence = point.userData.presence as Presence
+        if (!presence || !presence.is_online) return
+
+        const material = point.material as THREE.MeshStandardMaterial
+        if ('emissiveIntensity' in material) {
+          // Breathing glow effect
+          material.emissiveIntensity = 1.5 + breathe * 0.8
+        }
+      })
+
+      breathingAnimationRef.current = requestAnimationFrame(animateBreathing)
+    }
+
+    breathingAnimationRef.current = requestAnimationFrame(animateBreathing)
+
+    return () => {
+      cancelAnimationFrame(breathingAnimationRef.current)
     }
   }, [globe, presences, onPresenceClick, hoveredId])
 

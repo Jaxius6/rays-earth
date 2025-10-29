@@ -56,6 +56,38 @@ export function unlockAudio(): Promise<boolean> {
 }
 
 /**
+ * Generate and play subtle hover sound - extremely soft and gentle
+ */
+export function playHoverSound() {
+  if (!isUnlocked || !audioContext) return
+
+  try {
+    const ctx = audioContext!
+    const now = ctx.currentTime
+
+    // Very subtle, soft tone
+    const osc = ctx.createOscillator()
+    const gainNode = ctx.createGain()
+
+    osc.type = 'sine'
+    osc.frequency.value = 1200 // Higher frequency for softer feel
+
+    osc.connect(gainNode)
+    gainNode.connect(ctx.destination)
+
+    // Extremely quiet and brief
+    gainNode.gain.setValueAtTime(0, now)
+    gainNode.gain.linearRampToValueAtTime(0.015, now + 0.02) // Much quieter
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.12)
+
+    osc.start(now)
+    osc.stop(now + 0.12)
+  } catch (error) {
+    console.warn('Failed to play hover sound:', error)
+  }
+}
+
+/**
  * Generate and play ethereal hum during arc travel - QUIETER
  */
 export function playArcHum() {
