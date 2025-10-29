@@ -83,20 +83,34 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
         globe.add(point)
         existingPoints.set(presence.id, point)
 
-        // Glow sphere - larger, additive blending, ONLY for online users
+        // Particle glow - sprite with radial gradient, ONLY for online users
         if (presence.is_online) {
-          const glowSize = size * 3.0 // 3x larger than core
-          const glowGeometry = new THREE.SphereGeometry(glowSize, 16, 16)
-          const glowMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffffff,
+          // Create radial gradient texture
+          const canvas = document.createElement('canvas')
+          canvas.width = 64
+          canvas.height = 64
+          const ctx = canvas.getContext('2d')!
+          const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
+          gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)')
+          gradient.addColorStop(0.2, 'rgba(255, 255, 255, 0.8)')
+          gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.4)')
+          gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.1)')
+          gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+          ctx.fillStyle = gradient
+          ctx.fillRect(0, 0, 64, 64)
+
+          const texture = new THREE.CanvasTexture(canvas)
+          const glowMaterial = new THREE.SpriteMaterial({
+            map: texture,
             transparent: true,
-            opacity: 0.6,
-            blending: THREE.AdditiveBlending, // KEY: Additive blending for visible glow
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
             depthWrite: false,
           })
 
-          glow = new THREE.Mesh(glowGeometry, glowMaterial)
+          glow = new THREE.Sprite(glowMaterial)
           glow.position.set(position.x, position.y, position.z)
+          glow.scale.set(size * 6, size * 6, 1) // Larger glow area
           globe.add(glow)
           existingGlows.set(presence.id, glow)
         }
@@ -118,8 +132,8 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
 
         // Update glow opacity
         if (glow) {
-          const glowMaterial = glow.material as THREE.MeshBasicMaterial
-          glowMaterial.opacity = 0.6 * decay
+          const glowMaterial = glow.material as THREE.SpriteMaterial
+          glowMaterial.opacity = 0.8 * decay
         }
 
         // Scale handled by pulsing animation - don't reset here
@@ -316,8 +330,8 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
         const isHovered = hoveredId === presence.id
 
         if (presence.is_online) {
-          // Set target scale based on hover state - LARGER on hover
-          const targetScale = isHovered ? 1.7 : 1.0
+          // Set target scale based on hover state - moderate size
+          const targetScale = isHovered ? 1.4 : 1.0
 
           // Initialize currentScale if not set
           if (!point.userData.currentScale) {
@@ -329,18 +343,20 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
           const s = point.userData.currentScale
           point.scale.set(s, s, s)
 
-          // Glow sphere pulsates
+          // Particle glow pulsates
           if (glow) {
-            const glowMaterial = glow.material as THREE.MeshBasicMaterial
+            const glowMaterial = glow.material as THREE.SpriteMaterial
+            const baseSize = 0.6 * 6 // size * 6 from creation
 
             if (isHovered) {
               // Hovered: bright constant glow (no pulsing), sync scale with dot
-              glow.scale.set(s, s, s)
+              glow.scale.set(baseSize * s, baseSize * s, 1)
               glowMaterial.opacity = 0.9
             } else {
-              // Not hovered: glow pulses rhythmically
-              glow.scale.set(1.0, 1.0, 1.0)
-              glowMaterial.opacity = 0.3 + pulse * 0.6 // 0.3 to 0.9
+              // Not hovered: glow pulses rhythmically - SIZE pulses too
+              const glowPulse = 0.8 + pulse * 0.4 // 0.8 to 1.2 scale
+              glow.scale.set(baseSize * glowPulse, baseSize * glowPulse, 1)
+              glowMaterial.opacity = 0.4 + pulse * 0.5 // 0.4 to 0.9
             }
           }
         } else {

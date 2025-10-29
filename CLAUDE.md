@@ -119,12 +119,14 @@ All functions use service role key for RLS bypass. TypeScript errors in these fi
 
 ### Arc Animation System
 See **ARCS.md** for complete documentation. Quick overview:
-- **Phase 1 (0-5s)**: Drawing animation with marching ants
-- **Phase 2 (5-10s)**: Glow and pulse celebration
-- **Phase 3 (10s+)**: Fade to white over 10 seconds
-- **Phase 4 (24h)**: Slow fade to 0% opacity over 24 hours
-- Each arc has main tube, glow tube, and 40 particle "ants"
-- Ripple effects at start/end with warping animation
+- **Phase 1 (0-5s)**: ONLY marching ants travel (40 particles), tube hidden, continuous stream across entire arc
+- **Phase 2 (5-7s)**: AFTER ants land, tube progressively draws in (0 to 0.8 opacity)
+- **Phase 3 (7-12s)**: Glow and pulse celebration (glow tube pulsates)
+- **Phase 4 (12s+)**: Fade to white over 10 seconds, then slow fade to 0% over 24 hours
+- Each arc has main tube (0.6 radius), glow tube (1.0 radius), and 40 particle "ants"
+- Ripple effects at start (sender) and end (receiver at 7s with bong sound)
+- Ants use staggered delays (50% duration) to create continuous stream
+- Phases are strictly sequential - no overlap
 
 ### Database Schema
 Two tables (`supabase/sql/01_schema.sql`):
@@ -254,14 +256,15 @@ Enable demo mode in app/page.tsx to use hardcoded presences (useful for offline 
 - Animation takes 2.5 seconds to complete with power2.inOut easing
 
 ### "Active dots not glowing"
-- Active dots use MeshStandardMaterial with emissive white (0xffffff) and emissiveIntensity 2.0
-- Heartbeat animation runs in SEPARATE useEffect with [globe, hoveredId] dependencies (PresenceLayer.tsx lines 260-330)
-- Double-pulse pattern: first beat (0-0.3s), pause (0.3-0.5s), second beat (0.5-0.8s), long pause (0.8-2.0s)
-- Scale pulsates: 0.8 to 1.15 (base 0.8 + pulse * 0.35)
-- EmissiveIntensity pulsates: 1.5 to 3.0 (base 1.5 + pulse * 1.5)
-- Hovered dots locked at scale 1.5, emissiveIntensity 3.0
-- Offline dots static at scale 0.6, no emissive
-- Dot sizes: 0.6 radius (active), 0.5 radius (dormant)
+- Active dots have TWO components: solid core + particle glow
+- **Core dot**: MeshBasicMaterial, solid white, 0.6 radius
+- **Glow particle**: Sprite with radial gradient texture (canvas-based), 6x size of core
+- Glow uses AdditiveBlending for luminous effect
+- Rhythmic pulse animation: glow size 0.8 to 1.2, opacity 0.4 to 0.9 (~1.5s cycle)
+- Hovered dots: scale 1.4, glow opacity 0.9 (bright, no pulsing)
+- Smooth lerp transitions: 0.25 factor for quick response
+- Offline dots: static at scale 0.6, no glow
+- Glow animation runs in SEPARATE useEffect with [globe, hoveredId] dependencies
 
 ### "Hover effects affecting all dots"
 - Only hovered dot should change (check hoveredId === presence.id in animation loop)

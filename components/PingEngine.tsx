@@ -280,21 +280,28 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
         const elapsed = Date.now() - phase1StartTime
         const progress = Math.min(elapsed / phase1Duration, 1)
 
-        // Continuous marching ants along entire path
+        // Continuous marching ants - spread across ENTIRE path
         particles.forEach((particle, i) => {
-          // Spread particles evenly along entire path for continuous stream
-          const particleOffset = (i / particleCount)
-          const particlePos = progress - particleOffset * 0.3
+          // Each particle follows the leader with a delay
+          // This creates a continuous stream across the entire arc
+          const particleDelay = (i / particleCount) * 0.5 // Stagger by 50% of duration
+          const particleProgress = Math.max(0, Math.min(1, progress - particleDelay))
 
-          if (particlePos > 0 && particlePos <= 1) {
-            const point = tubePath.getPointAt(Math.min(particlePos, 1))
+          if (particleProgress > 0 && particleProgress < 1) {
+            const point = tubePath.getPointAt(particleProgress)
             particle.position.copy(point)
             particle.visible = true
 
-            // Smooth fade based on position
-            const fadeIn = Math.min(particlePos * 10, 1)
-            const fadeOut = particlePos > 0.9 ? (1 - particlePos) * 10 : 1
-            ;(particle.material as THREE.MeshBasicMaterial).opacity = fadeIn * fadeOut
+            // Smooth fade in/out
+            const fadeIn = Math.min(particleProgress * 5, 1)
+            const fadeOut = particleProgress > 0.8 ? (1 - particleProgress) * 5 : 1
+            ;(particle.material as THREE.MeshBasicMaterial).opacity = fadeIn * fadeOut * 0.8
+          } else if (particleProgress >= 1) {
+            // Keep at end position until tube draws
+            const point = tubePath.getPointAt(1)
+            particle.position.copy(point)
+            particle.visible = true
+            ;(particle.material as THREE.MeshBasicMaterial).opacity = 0.6
           } else {
             particle.visible = false
           }
