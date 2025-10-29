@@ -190,8 +190,12 @@ export default function HomePage() {
             
             // STEP 3: Center on MY location
             console.log('🎯 Step 3: Centering on MY location...')
+            console.log('DEBUG - Calling centerOn with lat:', lat, 'lng:', lng)
+            console.log('DEBUG - Position was:', position.coords.latitude, position.coords.longitude)
             if (globeControlsRef.current) {
               globeControlsRef.current.centerOn(lat, lng)
+            } else {
+              console.error('ERROR - globeControlsRef.current is null!')
             }
             
             announce(`Connected to rays.earth at ${lat.toFixed(2)}, ${lng.toFixed(2)}`)

@@ -57,7 +57,7 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     
     // Enhanced starfield with varying sizes and subtle color
     const starsGeometry = new THREE.BufferGeometry()
-    const starCount = 5000 // More stars for denser field
+    const starCount = 10000 // Maximum stars for dense, beautiful field
     const positions = new Float32Array(starCount * 3)
     const sizes = new Float32Array(starCount)
     const colors = new Float32Array(starCount * 3)
@@ -112,8 +112,8 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     const stars = new THREE.Points(starsGeometry, starsMaterial)
     globeGroup.add(stars) // Add to globe group so they rotate together
     
-    // Create sphere geometry (Earth) with ULTRA high polygon count for maximum smoothness
-    const geometry = new THREE.SphereGeometry(100, 256, 256) // Double the resolution!
+    // Create sphere geometry (Earth) with MAXIMUM polygon count for perfect smoothness
+    const geometry = new THREE.SphereGeometry(100, 512, 512) // MAXIMUM RESOLUTION!
     
     // Start with grey, then load texture - using StandardMaterial for better lighting
     const material = new THREE.MeshStandardMaterial({
@@ -185,7 +185,7 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     let targetRotation = { x: 0, y: 0 }
     let lastInteractionTime = Date.now()
     let isAutoRotating = false
-    const autoRotateSpeed = 0.0005 // Slower auto-rotate
+    const autoRotateSpeed = 0.0002 // Much slower auto-rotate
     const INACTIVITY_DELAY = 5000 // 5 seconds
 
     // Zoom limits - prevent going behind stars (stars at 400-800 range)
@@ -194,13 +194,25 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
 
     // Function to center camera on specific coordinates - USER'S POINT DEAD CENTER
     const centerOn = (lat: number, lng: number) => {
+      console.log('=== CENTER ON DEBUG ===')
+      console.log('Input coordinates - lat:', lat, 'lng:', lng)
+
+      // CRITICAL: Stop auto-rotation during centering
+      isAutoRotating = false
+      lastInteractionTime = Date.now()
+
       // Convert lat/lng to rotation angles
+      // Important: latLngToVector3 adds 180 to lng, so we need to account for that offset
       // Globe rotates OPPOSITE to bring point forward
-      const targetY = -lng * (Math.PI / 180)  // Longitude: rotate opposite direction
+      const targetY = -(lng + 180) * (Math.PI / 180)  // Longitude with 180° offset
       const targetX = -lat * (Math.PI / 180)  // Latitude: tilt opposite direction
-      
-      console.log(`Centering on user location: ${lat}, ${lng}`)
-      
+
+      console.log('Calculated target rotations:')
+      console.log('  targetX (latitude tilt):', targetX, 'radians =', (targetX * 180 / Math.PI), 'degrees')
+      console.log('  targetY (longitude spin):', targetY, 'radians =', (targetY * 180 / Math.PI), 'degrees')
+      console.log('Current rotation state:')
+      console.log('  rotation.x:', rotation.x, 'rotation.y:', rotation.y)
+
       // Smoothly animate to target
       gsap.to(targetRotation, {
         x: targetX,
@@ -208,10 +220,11 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
         duration: 2.5,
         ease: 'power2.inOut',
         onStart: () => {
-          console.log('Starting center animation')
+          console.log('🚀 Starting center animation to lat:', lat, 'lng:', lng)
         },
         onComplete: () => {
-          console.log('Center animation complete - user location is now dead center')
+          console.log('✅ Center animation complete - user location should be dead center')
+          console.log('Final rotation - x:', rotation.x, 'y:', rotation.y)
           // Reset timer after centering animation completes
           lastInteractionTime = Date.now()
         }

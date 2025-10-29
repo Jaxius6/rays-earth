@@ -252,7 +252,18 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
       }
     }
 
-    // Continuous heartbeat animation for active dots
+    return () => {
+      // Cleanup will happen in separate effect
+    }
+  }, [globe, presences, onPresenceClick, hoveredId])
+
+  // SEPARATE effect for continuous heartbeat animation - runs independently
+  useEffect(() => {
+    if (!globe) return
+
+    const existingPoints = pointsRef.current
+    let animationId: number
+
     const animateHeartbeat = () => {
       const time = Date.now() * 0.001
       // Heartbeat pattern: double pulse with pause (like a real heartbeat)
@@ -305,15 +316,18 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
         }
       })
 
-      breathingAnimationRef.current = requestAnimationFrame(animateHeartbeat)
+      animationId = requestAnimationFrame(animateHeartbeat)
     }
 
-    breathingAnimationRef.current = requestAnimationFrame(animateHeartbeat)
+    // Start animation loop
+    animationId = requestAnimationFrame(animateHeartbeat)
+    console.log('Heartbeat animation started')
 
     return () => {
-      cancelAnimationFrame(breathingAnimationRef.current)
+      console.log('Heartbeat animation stopped')
+      cancelAnimationFrame(animationId)
     }
-  }, [globe, presences, onPresenceClick, hoveredId])
+  }, [globe, hoveredId])
 
   // Cleanup on unmount
   useEffect(() => {
