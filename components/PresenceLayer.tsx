@@ -257,32 +257,17 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
     }
   }, [globe, presences, onPresenceClick, hoveredId])
 
-  // SEPARATE effect for continuous heartbeat animation - runs independently
+  // SEPARATE effect for continuous rhythmic glow pulse - runs independently
   useEffect(() => {
     if (!globe) return
 
     const existingPoints = pointsRef.current
     let animationId: number
 
-    const animateHeartbeat = () => {
+    const animateGlowPulse = () => {
       const time = Date.now() * 0.001
-      // Heartbeat pattern: double pulse with pause (like a real heartbeat)
-      const heartbeatCycle = time % 2.0 // 2 second cycle
-      let pulse
-
-      if (heartbeatCycle < 0.3) {
-        // First beat
-        pulse = Math.sin((heartbeatCycle / 0.3) * Math.PI)
-      } else if (heartbeatCycle < 0.5) {
-        // Short pause
-        pulse = 0
-      } else if (heartbeatCycle < 0.8) {
-        // Second beat
-        pulse = Math.sin(((heartbeatCycle - 0.5) / 0.3) * Math.PI) * 0.7 // Slightly weaker
-      } else {
-        // Long pause
-        pulse = 0
-      }
+      // Simple rhythmic pulse - smooth sine wave
+      const pulse = Math.sin(time * 1.5) * 0.5 + 0.5 // 0 to 1, ~1.5 second cycle
 
       existingPoints.forEach((point, id) => {
         const presence = point.userData.presence as Presence
@@ -294,37 +279,35 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
           const material = point.material as THREE.MeshStandardMaterial
 
           if (isHovered) {
-            // Hovered: stay large and bright
+            // Hovered: larger size, bright glow (no pulsing)
             point.scale.set(1.5, 1.5, 1.5)
             if ('emissiveIntensity' in material) {
               material.emissiveIntensity = 3.0
             }
           } else {
-            // Not hovered: heartbeat pulsation
-            const scaleAmount = 0.8 + pulse * 0.35 // 0.8 to 1.15
-            point.scale.set(scaleAmount, scaleAmount, scaleAmount)
+            // Not hovered: constant size, pulsing glow only
+            point.scale.set(1.0, 1.0, 1.0) // Keep size constant
 
-            // Glow intensity follows heartbeat
+            // Glow intensity pulses rhythmically
             if ('emissiveIntensity' in material) {
-              material.emissiveIntensity = 1.5 + pulse * 1.5
+              material.emissiveIntensity = 1.0 + pulse * 2.0 // 1.0 to 3.0
             }
           }
         } else {
-          // Offline dots: static
-          const baseScale = 0.6
-          point.scale.set(baseScale, baseScale, baseScale)
+          // Offline dots: static, smaller
+          point.scale.set(0.6, 0.6, 0.6)
         }
       })
 
-      animationId = requestAnimationFrame(animateHeartbeat)
+      animationId = requestAnimationFrame(animateGlowPulse)
     }
 
     // Start animation loop
-    animationId = requestAnimationFrame(animateHeartbeat)
-    console.log('Heartbeat animation started')
+    animationId = requestAnimationFrame(animateGlowPulse)
+    console.log('Rhythmic glow pulse animation started')
 
     return () => {
-      console.log('Heartbeat animation stopped')
+      console.log('Rhythmic glow pulse animation stopped')
       cancelAnimationFrame(animationId)
     }
   }, [globe, hoveredId])
