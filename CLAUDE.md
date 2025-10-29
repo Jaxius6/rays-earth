@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 rays.earth is a real-time, planet-wide visualization of human presence. It displays a dark 3D Earth with glowing presence dots and allows users to send luminous arcs (pings) between locations. The experience is minimal and meditative—no visible UI, just the globe and interactions.
 
-**Stack**: Next.js 14 (App Router), React 18, TypeScript, Three.js, GSAP, Supabase Realtime, Howler.js
+**Stack**: Next.js 14 (App Router), React 18, TypeScript, Three.js, GSAP, Supabase Realtime, Web Audio API
 
 ## Common Commands
 
@@ -60,7 +60,7 @@ app/page.tsx (main orchestrator)
 ### Key Libraries
 - **lib/realtime.ts**: Supabase Realtime subscriptions (presences table + pings broadcast channel)
 - **lib/geo.ts**: Coordinate rounding (privacy), haversine distance, lat/lng to 3D vector conversion, decay calculations
-- **lib/audio.ts**: Howler.js wrapper for ping/ripple sounds
+- **lib/audio.ts**: Web Audio API procedural sound generation (hover woosh, arc hum, connection bong)
 - **lib/supabase-browser.ts**: Supabase client + RPC function wrappers
 
 ### Data Flow
@@ -91,18 +91,20 @@ Presence dots fade over 24 hours after going offline. Formula in `calculateDecay
 
 ### Globe Rendering Details
 - **Custom Three.js implementation**: No external globe libraries used
-- **Texture**: Earth map loaded from CDN, converted to greyscale via fragment shader
+- **Texture**: Earth map (Blue Marble 8K) + topology bump map loaded from CDN, converted to greyscale via fragment shader
 - **High-quality rendering**:
-  - Sphere geometry: 128x128 polygons for smooth surface
+  - Sphere geometry: 512x512 polygons (MAXIMUM RESOLUTION) for perfectly smooth surface
   - Pixel ratio: up to 3x for sharp rendering
-  - ACES Filmic tone mapping for better color
-  - StandardMaterial with roughness/metalness for realistic lighting
-- **Shader**: Custom GLSL grayscale conversion with brightness boost:
+  - ACES Filmic tone mapping with 1.2 exposure for better color
+  - StandardMaterial with roughness 0.9, metalness 0.1, bump mapping for surface detail
+  - Anisotropic filtering at maximum (texture sharpness)
+- **Shader**: Custom GLSL grayscale conversion with gamma correction and brightness boost:
   ```glsl
   float grey = dot(sampledDiffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-  diffuseColor *= vec4(vec3(grey * 3.5), sampledDiffuseColor.a);
+  grey = pow(grey, 0.85) * 4.0; // Gamma correction + 4x boost
+  diffuseColor *= vec4(vec3(grey), sampledDiffuseColor.a);
   ```
-- **Enhanced starfield**: 5000 stars with varied sizes, subtle color variation (blue/white/orange), additive blending for glow
+- **Enhanced starfield**: 10,000 stars positioned 400-800 units away, varied sizes (0.5-3.5), subtle color variation (5% blue-white, 5% warm orange, 90% white), additive blending for glow, size attenuation with distance
 
 ### Supabase Edge Functions (Deno)
 Located in `supabase/functions/`:
@@ -137,9 +139,13 @@ RLS policies (`supabase/sql/02_policies.sql`): All direct table access denied. O
 - **Subscriptions**: Client subscribes to both in `lib/realtime.ts`
 
 ### Audio System
-- **Files**: `/public/audio/ping.wav` and `/public/audio/ripple.wav` (placeholder WAVs in repo)
+- **Web Audio API**: Procedural sound generation (no audio files needed)
 - **Unlock**: `AudioGate.tsx` handles mobile gesture requirement (iOS/Android policy)
-- **Playback**: Howler.js via `lib/audio.ts`
+- **Sounds**:
+  - **Hover woosh**: Frequency sweep 150Hz → 800Hz with low-pass filter (1200Hz cutoff), 0.008 gain, 150ms duration
+  - **Arc hum**: Layered triangle waves (110Hz fundamental + harmonics), 0.06-0.01 gain per layer, 5s duration
+  - **Connection bong**: Pure sine wave, harmonizing upward with each ping (A2 → A4), 0.12 gain, 1.5s decay
+- **Implementation**: `lib/audio.ts` using Web Audio API oscillators, filters, and gain envelopes
 
 ### Demo Mode
 30 demo presences hardcoded in `app/page.tsx` (10 online, 20 offline at various fade stages). Used for testing without Supabase.
@@ -195,9 +201,10 @@ supabase functions deploy <function-name>
 
 ### Mobile Considerations
 - Audio requires user gesture to unlock on iOS/Android—handled by AudioGate.tsx
-- Touch rotate enabled, zoom disabled (desktop mouse wheel zoom: 200-450 units)
+- Touch rotate enabled (desktop mouse wheel zoom: 200-380 units, prevents going behind stars at 400-800)
 - Camera distance adjusted for mobile: 400 vs 300 (see GlobeCanvas.tsx:38) - further away for better view
 - Drag rotation speed: 0.002 for heavy, massive globe feel
+- Auto-rotation speed: 0.0002 (very slow, meditative)
 
 ### Supabase Edge Functions
 - TypeScript errors are expected (Deno imports from URLs)
@@ -210,11 +217,14 @@ Enable demo mode in app/page.tsx to use hardcoded presences (useful for offline 
 ## Performance Notes
 
 ### Optimizations Applied
-- Instanced meshes for presence dots (avoid per-dot overhead)
+- Individual meshes for presence dots (allows per-dot materials and emissive animations)
 - Throttled realtime updates (10 Hz client-side)
 - Lazy-loaded Three.js scene after first paint
-- Pixel ratio capped at 2x
-- Greyscale shader applied at runtime (no need to pre-process textures)
+- Pixel ratio capped at 3x for maximum quality
+- Greyscale shader with gamma correction applied at runtime (no pre-processing needed)
+- Separate RAF loop for heartbeat animation (independent of React re-renders)
+- Anisotropic filtering for texture sharpness
+- Bump mapping for surface detail without geometry overhead
 
 ### Known Limitations
 - 50-60 FPS target on mid-range phones
@@ -238,19 +248,26 @@ Enable demo mode in app/page.tsx to use hardcoded presences (useful for offline 
 
 ### "Auto-center not working"
 - Centering happens only when geolocation succeeds
-- Formula: `targetY = -lng * (PI/180)`, `targetX = -lat * (PI/180)`
-- Check console logs for "Centering on user location" message
-- Animation takes 2.5 seconds to complete
+- Formula accounts for latLngToVector3 offset: `targetY = -(lng + 180) * (PI/180)`, `targetX = -lat * (PI/180)`
+- Stops auto-rotation during centering to prevent interference
+- Check console logs for "=== CENTER ON DEBUG ===" message with detailed rotation info
+- Animation takes 2.5 seconds to complete with power2.inOut easing
 
 ### "Active dots not glowing"
-- Dots use MeshStandardMaterial with emissive property
-- Breathing animation runs in separate RAF loop (PresenceLayer.tsx)
-- EmissiveIntensity oscillates: `1.5 + breathe * 0.8` where breathe is `0.85 + sin(time * 1.5) * 0.15`
+- Active dots use MeshStandardMaterial with emissive white (0xffffff) and emissiveIntensity 2.0
+- Heartbeat animation runs in SEPARATE useEffect with [globe, hoveredId] dependencies (PresenceLayer.tsx lines 260-330)
+- Double-pulse pattern: first beat (0-0.3s), pause (0.3-0.5s), second beat (0.5-0.8s), long pause (0.8-2.0s)
+- Scale pulsates: 0.8 to 1.15 (base 0.8 + pulse * 0.35)
+- EmissiveIntensity pulsates: 1.5 to 3.0 (base 1.5 + pulse * 1.5)
+- Hovered dots locked at scale 1.5, emissiveIntensity 3.0
+- Offline dots static at scale 0.6, no emissive
+- Dot sizes: 0.6 radius (active), 0.5 radius (dormant)
 
 ### "Hover effects affecting all dots"
-- Only hovered dot should change (check hoveredId state)
-- Hover sound plays once per hover (1200Hz sine, 0.015 gain, 120ms duration)
-- Breathing animation is global but should not affect hover scale
+- Only hovered dot should change (check hoveredId === presence.id in animation loop)
+- Hover sound: soft woosh with frequency sweep 150Hz → 800Hz, low-pass filtered at 1200Hz, 0.008 gain, 150ms
+- Hover creates warping ripple effect at dot location (RingGeometry, scale animation with warp)
+- Heartbeat animation respects hover state: hovered dots stay large (1.5 scale, 3.0 emissive)
 
 ### "Realtime not updating"
 - Verify replication enabled for `presences` table
@@ -258,14 +275,22 @@ Enable demo mode in app/page.tsx to use hardcoded presences (useful for offline 
 - Confirm NEXT_PUBLIC_SUPABASE_ANON_KEY set correctly
 
 ### "Audio not playing on mobile"
-- AudioGate component must render—checks for user gesture
-- Verify audio files exist at `/public/audio/*.wav`
-- Check browser console for Howler.js errors
+- AudioGate component must render—checks for user gesture to unlock AudioContext
+- Web Audio API requires resume() on suspended AudioContext (iOS/Android policy)
+- Check browser console for "Failed to play" warnings from lib/audio.ts
+- Verify AudioContext is created and unlocked (isAudioUnlocked() should return true)
 
 ### "TypeScript errors in Edge Functions"
 - Expected—Deno imports from URLs not recognized by TypeScript
 - Functions work correctly when deployed
 - Add `// @ts-ignore` if needed for IDE
+
+### "Dots positioned incorrectly on globe"
+- latLngToVector3 adds 180° offset: `theta = toRadians(lng + 180)`
+- This accounts for Three.js spherical coordinate system where 0° longitude is at back of sphere
+- Dot positioning: use latLngToVector3(lat, lng, globeRadius) - conversion handles offset automatically
+- Globe rotation: must account for offset manually: `targetY = -(lng + 180) * (PI/180)`
+- Dots should be at ground level: radius = globeRadius (100), NOT globeRadius + 2
 
 ## Useful SQL Queries
 
