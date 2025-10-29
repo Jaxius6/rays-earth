@@ -55,12 +55,12 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
         const size = presence.is_online ? 0.6 : 0.5
         const geometry = new THREE.SphereGeometry(size, 16, 16)
 
-        // Online dots glow with emissive material
+        // Online dots glow with emissive material - MUCH BRIGHTER
         const material = presence.is_online
           ? new THREE.MeshStandardMaterial({
               color: 0xffffff,
               emissive: 0xffffff,
-              emissiveIntensity: 2.0,
+              emissiveIntensity: 5.0, // Much brighter base glow
               transparent: true,
               opacity: decay,
             })
@@ -72,7 +72,13 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
 
         point = new THREE.Mesh(geometry, material)
         point.position.set(position.x, position.y, position.z)
-        point.userData = { presence, isClickable: presence.is_online, startTime: Date.now() }
+        point.userData = {
+          presence,
+          isClickable: presence.is_online,
+          startTime: Date.now(),
+          targetScale: 1.0, // For smooth scale transitions
+          currentScale: 1.0
+        }
         
         globe.add(point)
         existingPoints.set(presence.id, point)
@@ -88,10 +94,14 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
 
         // Update emissive for online dots
         if (presence.is_online && 'emissive' in material) {
-          material.emissiveIntensity = 2.0
+          material.emissiveIntensity = 5.0
         }
 
-        point.userData = { presence, isClickable: presence.is_online }
+        point.userData = {
+          ...point.userData,
+          presence,
+          isClickable: presence.is_online
+        }
 
         // Scale handled by breathing animation - don't reset here
       }
@@ -278,19 +288,28 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
         if (presence.is_online) {
           const material = point.material as THREE.MeshStandardMaterial
 
+          // Set target scale based on hover state
+          const targetScale = isHovered ? 1.5 : 1.0
+
+          // Initialize currentScale if not set
+          if (!point.userData.currentScale) {
+            point.userData.currentScale = 1.0
+          }
+
+          // Smooth lerp towards target scale (0.15 = lerp factor)
+          point.userData.currentScale += (targetScale - point.userData.currentScale) * 0.15
+          const s = point.userData.currentScale
+          point.scale.set(s, s, s)
+
           if (isHovered) {
-            // Hovered: larger size, bright glow (no pulsing)
-            point.scale.set(1.5, 1.5, 1.5)
+            // Hovered: bright constant glow (no pulsing)
             if ('emissiveIntensity' in material) {
-              material.emissiveIntensity = 3.0
+              material.emissiveIntensity = 10.0
             }
           } else {
-            // Not hovered: constant size, pulsing glow only
-            point.scale.set(1.0, 1.0, 1.0) // Keep size constant
-
-            // Glow intensity pulses rhythmically
+            // Not hovered: glow pulses rhythmically - MUCH BRIGHTER
             if ('emissiveIntensity' in material) {
-              material.emissiveIntensity = 1.0 + pulse * 2.0 // 1.0 to 3.0
+              material.emissiveIntensity = 5.0 + pulse * 5.0 // 5.0 to 10.0
             }
           }
         } else {
