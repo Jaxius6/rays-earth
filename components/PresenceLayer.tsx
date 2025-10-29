@@ -18,6 +18,7 @@ interface PresenceLayerProps {
  */
 export default function PresenceLayer({ globe, presences, onPresenceClick }: PresenceLayerProps) {
   const pointsRef = useRef<Map<string, THREE.Mesh>>(new Map())
+  const glowsRef = useRef<Map<string, THREE.Mesh>>(new Map())
   const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster())
   const mouseRef = useRef<THREE.Vector2>(new THREE.Vector2())
   const [hoveredId, setHoveredId] = useState<string | null>(null)
@@ -30,45 +31,44 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
 
     const globeRadius = 100
     const existingPoints = pointsRef.current
+    const existingGlows = glowsRef.current
 
     // Update or create points for each presence
     presences.forEach((presence) => {
       const decay = calculateDecay(presence.last_active, presence.is_online)
-      
+
       // Remove fully faded presences
       if (decay <= 0) {
         const point = existingPoints.get(presence.id)
+        const glow = existingGlows.get(presence.id)
         if (point) {
           globe.remove(point)
           existingPoints.delete(presence.id)
+        }
+        if (glow) {
+          globe.remove(glow)
+          glow.geometry.dispose()
+          ;(glow.material as THREE.Material).dispose()
+          existingGlows.delete(presence.id)
         }
         return
       }
 
       let point = existingPoints.get(presence.id)
+      let glow = existingGlows.get(presence.id)
 
       // Create new point if doesn't exist
       if (!point) {
         const position = latLngToVector3(presence.lat, presence.lng, globeRadius)
 
-        // Smaller dots - online dots are tiny but glow
+        // Core dot - solid white
         const size = presence.is_online ? 0.6 : 0.5
         const geometry = new THREE.SphereGeometry(size, 16, 16)
-
-        // Online dots glow with emissive material - MUCH BRIGHTER
-        const material = presence.is_online
-          ? new THREE.MeshStandardMaterial({
-              color: 0xffffff,
-              emissive: 0xffffff,
-              emissiveIntensity: 5.0, // Much brighter base glow
-              transparent: true,
-              opacity: decay,
-            })
-          : new THREE.MeshBasicMaterial({
-              color: 0xffffff,
-              transparent: true,
-              opacity: 0.1, // Offline starts at 10%
-            })
+        const material = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: presence.is_online ? decay : 0.1,
+        })
 
         point = new THREE.Mesh(geometry, material)
         point.position.set(position.x, position.y, position.z)
@@ -76,15 +76,33 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
           presence,
           isClickable: presence.is_online,
           startTime: Date.now(),
-          targetScale: 1.0, // For smooth scale transitions
+          targetScale: 1.0,
           currentScale: 1.0
         }
-        
+
         globe.add(point)
         existingPoints.set(presence.id, point)
+
+        // Glow sphere - larger, additive blending, ONLY for online users
+        if (presence.is_online) {
+          const glowSize = size * 3.0 // 3x larger than core
+          const glowGeometry = new THREE.SphereGeometry(glowSize, 16, 16)
+          const glowMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.6,
+            blending: THREE.AdditiveBlending, // KEY: Additive blending for visible glow
+            depthWrite: false,
+          })
+
+          glow = new THREE.Mesh(glowGeometry, glowMaterial)
+          glow.position.set(position.x, position.y, position.z)
+          globe.add(glow)
+          existingGlows.set(presence.id, glow)
+        }
       } else {
         // Update existing point
-        const material = point.material as THREE.MeshBasicMaterial | THREE.MeshStandardMaterial
+        const material = point.material as THREE.MeshBasicMaterial
 
         // Online users: full decay, Offline users: 10% max, fading to 0%
         let finalOpacity = presence.is_online ? decay : Math.max(0, 0.1 * decay)
@@ -92,18 +110,19 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
         material.opacity = finalOpacity
         material.color.setHex(0xffffff) // Always white
 
-        // Update emissive for online dots
-        if (presence.is_online && 'emissive' in material) {
-          material.emissiveIntensity = 5.0
-        }
-
         point.userData = {
           ...point.userData,
           presence,
           isClickable: presence.is_online
         }
 
-        // Scale handled by breathing animation - don't reset here
+        // Update glow opacity
+        if (glow) {
+          const glowMaterial = glow.material as THREE.MeshBasicMaterial
+          glowMaterial.opacity = 0.6 * decay
+        }
+
+        // Scale handled by pulsing animation - don't reset here
       }
     })
 
@@ -116,6 +135,15 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
           point.material.dispose()
         }
         existingPoints.delete(id)
+
+        // Also remove glow
+        const glow = existingGlows.get(id)
+        if (glow) {
+          globe.remove(glow)
+          glow.geometry.dispose()
+          ;(glow.material as THREE.Material).dispose()
+          existingGlows.delete(id)
+        }
       }
     })
 
@@ -272,6 +300,7 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
     if (!globe) return
 
     const existingPoints = pointsRef.current
+    const existingGlows = glowsRef.current
     let animationId: number
 
     const animateGlowPulse = () => {
@@ -283,37 +312,39 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
         const presence = point.userData.presence as Presence
         if (!presence) return
 
+        const glow = existingGlows.get(id)
         const isHovered = hoveredId === presence.id
 
         if (presence.is_online) {
-          const material = point.material as THREE.MeshStandardMaterial
-
-          // Set target scale based on hover state
-          const targetScale = isHovered ? 1.5 : 1.0
+          // Set target scale based on hover state - LARGER on hover
+          const targetScale = isHovered ? 1.7 : 1.0
 
           // Initialize currentScale if not set
           if (!point.userData.currentScale) {
             point.userData.currentScale = 1.0
           }
 
-          // Smooth lerp towards target scale (0.15 = lerp factor)
-          point.userData.currentScale += (targetScale - point.userData.currentScale) * 0.15
+          // Faster smooth lerp towards target scale (0.25 = faster lerp)
+          point.userData.currentScale += (targetScale - point.userData.currentScale) * 0.25
           const s = point.userData.currentScale
           point.scale.set(s, s, s)
 
-          if (isHovered) {
-            // Hovered: bright constant glow (no pulsing)
-            if ('emissiveIntensity' in material) {
-              material.emissiveIntensity = 10.0
-            }
-          } else {
-            // Not hovered: glow pulses rhythmically - MUCH BRIGHTER
-            if ('emissiveIntensity' in material) {
-              material.emissiveIntensity = 5.0 + pulse * 5.0 // 5.0 to 10.0
+          // Glow sphere pulsates
+          if (glow) {
+            const glowMaterial = glow.material as THREE.MeshBasicMaterial
+
+            if (isHovered) {
+              // Hovered: bright constant glow (no pulsing), sync scale with dot
+              glow.scale.set(s, s, s)
+              glowMaterial.opacity = 0.9
+            } else {
+              // Not hovered: glow pulses rhythmically
+              glow.scale.set(1.0, 1.0, 1.0)
+              glowMaterial.opacity = 0.3 + pulse * 0.6 // 0.3 to 0.9
             }
           }
         } else {
-          // Offline dots: static, smaller
+          // Offline dots: static, smaller, no glow
           point.scale.set(0.6, 0.6, 0.6)
         }
       })
@@ -344,6 +375,17 @@ export default function PresenceLayer({ globe, presences, onPresenceClick }: Pre
         }
       })
       pointsRef.current.clear()
+
+      glowsRef.current.forEach((glow) => {
+        if (globe) {
+          globe.remove(glow)
+        }
+        glow.geometry.dispose()
+        if (glow.material instanceof THREE.Material) {
+          glow.material.dispose()
+        }
+      })
+      glowsRef.current.clear()
     }
   }, [globe])
 

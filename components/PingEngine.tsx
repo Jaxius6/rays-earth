@@ -268,39 +268,30 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
       // Start audio hum
       if (isFromMe || isToMe) playArcHum()
 
-      // Animation state for drawing reveal
-      const animationState = { revealProgress: 0 }
-      let animationFrame: number
+      // PHASE 1: ONLY MARCHING ANTS - continuous stream, NO tube visible
+      const phase1StartTime = Date.now()
+      const phase1Duration = 5000 // 5 seconds for ants to travel
 
-      // Actual drawing animation using manual RAF loop
-      const startTime = Date.now()
-      const duration = 5000
+      // Keep tube completely hidden during phase 1
+      tubeMaterial.opacity = 0
+      glowMaterial.opacity = 0
 
-      const animateDrawing = () => {
-        const elapsed = Date.now() - startTime
-        const progress = Math.min(elapsed / duration, 1)
-        animationState.revealProgress = progress
+      const animateAntsOnly = () => {
+        const elapsed = Date.now() - phase1StartTime
+        const progress = Math.min(elapsed / phase1Duration, 1)
 
-        // PHASE 1: Arc drawing with marching ants (NO glow yet)
-        // Fade in the arc materials progressively
-        const arcOpacity = Math.min(progress * 2, 1.0)
-        tubeMaterial.opacity = arcOpacity
-        
-        // NO GLOW during drawing - keep it hidden!
-        glowMaterial.opacity = 0
-
-        // Animate marching ants along revealed portion
+        // Continuous marching ants along entire path
         particles.forEach((particle, i) => {
-          // Spread particles evenly along path
-          const particleOffset = (i / particleCount) * 0.3
-          const particlePos = progress - particleOffset
-          
+          // Spread particles evenly along entire path for continuous stream
+          const particleOffset = (i / particleCount)
+          const particlePos = progress - particleOffset * 0.3
+
           if (particlePos > 0 && particlePos <= 1) {
             const point = tubePath.getPointAt(Math.min(particlePos, 1))
             particle.position.copy(point)
             particle.visible = true
-            
-            // Fade based on position
+
+            // Smooth fade based on position
             const fadeIn = Math.min(particlePos * 10, 1)
             const fadeOut = particlePos > 0.9 ? (1 - particlePos) * 10 : 1
             ;(particle.material as THREE.MeshBasicMaterial).opacity = fadeIn * fadeOut
@@ -310,21 +301,48 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
         })
 
         if (progress < 1) {
-          animationFrame = requestAnimationFrame(animateDrawing)
+          requestAnimationFrame(animateAntsOnly)
         } else {
-          // Drawing complete - start glow phase
-          startGlowPhase()
+          // Phase 1 complete - ants have landed, start tube drawing
+          startTubeDrawing()
         }
       }
 
-      // Start drawing animation
-      animationFrame = requestAnimationFrame(animateDrawing)
+      // Start phase 1: ants only
+      requestAnimationFrame(animateAntsOnly)
 
-      // PHASE 2: Glow and pulse for 5 seconds after connection
-      // KEEP MARCHING ANTS VISIBLE! Just stop updating their position
+      // PHASE 2: TUBE DRAWS IN - after ants land
+      const startTubeDrawing = () => {
+        const phase2StartTime = Date.now()
+        const phase2Duration = 2000 // 2 seconds for tube to draw
+
+        // Keep ants visible but static
+        particles.forEach(p => {
+          (p.material as THREE.MeshBasicMaterial).opacity = 0.6
+        })
+
+        const animateTubeDrawing = () => {
+          const elapsed = Date.now() - phase2StartTime
+          const progress = Math.min(elapsed / phase2Duration, 1)
+
+          // Tube fades in progressively
+          tubeMaterial.opacity = progress * 0.8
+          glowMaterial.opacity = 0 // No glow yet
+
+          if (progress < 1) {
+            requestAnimationFrame(animateTubeDrawing)
+          } else {
+            // Tube drawn - start glow phase
+            startGlowPhase()
+          }
+        }
+
+        requestAnimationFrame(animateTubeDrawing)
+      }
+
+      // PHASE 3: Glow and pulse for 5 seconds after tube is drawn
       const startGlowPhase = () => {
-        // DON'T delete particles - keep them visible!
-        // Just make them stationary and slightly dimmer
+        // Keep ants visible but slightly dimmer
         particles.forEach(p => {
           (p.material as THREE.MeshBasicMaterial).opacity = 0.4
         })
@@ -332,20 +350,20 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
         // Now add pulsating glow!
         const glowStartTime = Date.now()
         const glowDuration = 5000 // 5 seconds of pulsing
-        
+
         const animateGlow = () => {
           const glowElapsed = Date.now() - glowStartTime
           const glowProgress = Math.min(glowElapsed / glowDuration, 1)
-          
+
           // Pulsating glow effect
           const pulse = Math.sin(Date.now() * 0.01) * 0.3 + 0.7
           glowMaterial.opacity = 0.6 * pulse
-          
+
           // Keep ants pulsing too
           particles.forEach(p => {
             (p.material as THREE.MeshBasicMaterial).opacity = 0.3 + pulse * 0.2
           })
-          
+
           if (glowProgress < 1) {
             requestAnimationFrame(animateGlow)
           } else {
@@ -353,11 +371,11 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
             startFadeToWhite()
           }
         }
-        
+
         animateGlow()
       }
 
-      // PHASE 3: Fade to white and thin over 10 seconds
+      // PHASE 4: Fade to white and thin over 10 seconds
       const startFadeToWhite = () => {
         // Keep ants visible but make them white too
         particles.forEach(p => {
@@ -433,10 +451,11 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
       }
 
       // End ripple at receiver with bong - ALWAYS play bong!
+      // This happens when tube finishes drawing (phase 1: 5s + phase 2: 2s = 7s)
       setTimeout(() => {
         createRipple(ping.to_lat, ping.to_lng, 0, false)
         playBong() // Play for EVERYONE, not just me
-      }, 5000)
+      }, 7000)
     })
   }, [globe, pings, myPresence])
 
