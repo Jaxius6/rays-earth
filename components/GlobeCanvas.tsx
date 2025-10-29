@@ -104,7 +104,7 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
             #ifdef USE_MAP
               vec4 sampledDiffuseColor = texture2D( map, vMapUv );
               float grey = dot(sampledDiffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-              diffuseColor *= vec4(vec3(grey * 1.1), sampledDiffuseColor.a);
+              diffuseColor *= vec4(vec3(grey * 1.8), sampledDiffuseColor.a);
             #endif
             `
           )
@@ -118,10 +118,10 @@ export default function GlobeCanvas({ onGlobeReady }: GlobeCanvasProps) {
     globeGroup.add(sphere)
 
     // Add lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.9)
     scene.add(ambientLight)
-    
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.4)
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6)
     directionalLight.position.set(5, 3, 5)
     scene.add(directionalLight)
 
