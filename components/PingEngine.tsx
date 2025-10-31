@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import gsap from 'gsap'
 import { Ping } from '@/lib/supabase-browser'
-import { interpolateGreatCircle, latLngToVector3 } from '@/lib/geo'
+import { interpolateGreatCircle, latLngToVector3, haversineDistance } from '@/lib/geo'
 import { playArcHum, playBong } from '@/lib/audio'
 
 interface PingEngineProps {
@@ -15,23 +15,23 @@ interface PingEngineProps {
 
 interface PersistentArc {
   id: string
-  arc: THREE.Mesh | THREE.Line
-  glowArc: THREE.Mesh | THREE.Line
+  arc: THREE.Mesh
+  glowArc: THREE.Mesh
   createdAt: number
-  geometry: THREE.BufferGeometry | THREE.TubeGeometry
-  material: THREE.MeshBasicMaterial | THREE.LineBasicMaterial
-  glowMaterial: THREE.MeshBasicMaterial | THREE.LineBasicMaterial
+  geometry: THREE.TubeGeometry
+  material: THREE.MeshBasicMaterial
+  glowMaterial: THREE.MeshBasicMaterial
 }
 
 /**
  * Manages ping arc animations between users
- * Arcs persist for 24 hours with decay
+ * Clock wipe drawing effect, then glow, then 24-hour decay
  */
 export default function PingEngine({ globe, pings, myPresence }: PingEngineProps) {
   const persistentArcsRef = useRef<Map<string, PersistentArc>>(new Map())
   const animatingArcsRef = useRef<Set<string>>(new Set())
 
-  // Update arc opacities based on age
+  // Update arc opacities based on age (24-hour decay)
   useEffect(() => {
     if (!globe) return
 
@@ -52,26 +52,15 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
           arcData.glowMaterial.dispose()
           persistentArcs.delete(id)
         } else if (ageMs > 10000) {
-          // After 10 seconds, start fading to white and thinner
-          // Fade from 10% to 0% over 24 hours
-          const fadeProgress = (ageHours / 24)
+          // After 10 seconds, continue fading to 0% over 24 hours
+          const fadeProgress = ageHours / 24
           const opacity = Math.max(0, 0.1 * (1 - fadeProgress))
-          
-          // Transition to white over time
-          const whiteness = Math.min(1, ageMs / 60000) // Fully white after 1 minute
-          const color = new THREE.Color().lerpColors(
-            new THREE.Color(0xffb300),
-            new THREE.Color(0xffffff),
-            whiteness
-          )
-          
+
           if ('color' in arcData.material) {
             arcData.material.opacity = opacity
-            arcData.material.color = color
           }
           if ('color' in arcData.glowMaterial) {
             arcData.glowMaterial.opacity = opacity * 0.3
-            arcData.glowMaterial.color = color
           }
         }
       })
@@ -108,10 +97,28 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
       const startPos = latLngToVector3(ping.from_lat, ping.from_lng, globeRadius)
       const endPos = latLngToVector3(ping.to_lat, ping.to_lng, globeRadius)
 
+      // Calculate distance between points to determine arc height
+      const distance = haversineDistance(
+        ping.from_lat,
+        ping.from_lng,
+        ping.to_lat,
+        ping.to_lng
+      )
+
+      // Scale arc height based on distance
+      // Close distances (0-500km): 20% height
+      // Far distances (10,000km+): 100% height
+      const minDistance = 500 // km - close distance threshold
+      const maxDistance = 10000 // km - far distance threshold
+      const normalizedDistance = Math.min(Math.max((distance - minDistance) / (maxDistance - minDistance), 0), 1)
+      const heightScale = 0.2 + (normalizedDistance * 0.8) // 20% to 100%
+      const maxHeight = 60 // Maximum arc height in units
+      const scaledHeight = maxHeight * heightScale
+
       // Make arc loop higher above globe, but START and END at exact dot positions
       const positions: THREE.Vector3[] = arcPoints.map((point, index) => {
         const t = index / (arcPoints.length - 1)
-        
+
         if (t === 0) {
           // First point: exact start position
           return new THREE.Vector3(startPos.x, startPos.y, startPos.z)
@@ -119,18 +126,14 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
           // Last point: exact end position
           return new THREE.Vector3(endPos.x, endPos.y, endPos.z)
         } else {
-          // Middle points: arc high above globe
-          const heightBoost = Math.sin(t * Math.PI) * 60 // Peak height - 60 units
+          // Middle points: arc high above globe (height varies with distance)
+          const heightBoost = Math.sin(t * Math.PI) * scaledHeight
           const pos = latLngToVector3(point.lat, point.lng, globeRadius + heightBoost)
           return new THREE.Vector3(pos.x, pos.y, pos.z)
         }
       })
 
-      const curve = new THREE.CatmullRomCurve3(positions, false, 'catmullrom', 0.5)
-      const points = curve.getPoints(200)
-      const geometry = new THREE.BufferGeometry().setFromPoints(points)
-
-      // Validate positions array more thoroughly
+      // Validate positions array
       const validPositions = positions.filter(p =>
         p &&
         typeof p.x === 'number' &&
@@ -139,55 +142,55 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
         !isNaN(p.x) && !isNaN(p.y) && !isNaN(p.z) &&
         isFinite(p.x) && isFinite(p.y) && isFinite(p.z)
       )
-      
+
       if (validPositions.length < 2) {
         console.error('Invalid positions for arc:', positions)
         animatingArcs.delete(ping.id)
         return
       }
 
-      // Thinner tubes
-      let tubeGeometry, tubePath
+      // Create tube geometry for arc
+      let tubeGeometry: THREE.TubeGeometry
+      let tubePath: THREE.CatmullRomCurve3
       try {
         tubePath = new THREE.CatmullRomCurve3(validPositions, false, 'catmullrom', 0.5)
-        tubeGeometry = new THREE.TubeGeometry(tubePath, 200, 0.6, 16, false) // 0.6 radius = thinner
+        tubeGeometry = new THREE.TubeGeometry(tubePath, 200, 0.6, 16, false)
       } catch (error) {
         console.error('Failed to create tube geometry:', error)
         animatingArcs.delete(ping.id)
         return
       }
-      
+
+      // Main tube material with clock wipe effect
       const tubeMaterial = new THREE.MeshBasicMaterial({
         color: 0xffb300,
         transparent: true,
-        opacity: 0,
+        opacity: 0.8,
       })
-      
+
       const arc = new THREE.Mesh(tubeGeometry, tubeMaterial)
+      arc.frustumCulled = false
       globe.add(arc)
-      
-      // Glow layer - also thinner
-      const glowTubeGeometry = new THREE.TubeGeometry(tubePath, 200, 1.0, 16, false) // 1.0 radius
+
+      // Glow layer
+      const glowTubeGeometry = new THREE.TubeGeometry(tubePath, 200, 1.0, 16, false)
       const glowMaterial = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
         opacity: 0,
       })
-      
+
       const glowArc = new THREE.Mesh(glowTubeGeometry, glowMaterial)
+      glowArc.frustumCulled = false
       globe.add(glowArc)
-      
-      // Store geometry references
-      const arcGeometry = tubeGeometry
-      const glowGeometry = glowTubeGeometry
 
       // Check if involves current user
-      const isFromMe = myPresence && 
-        Math.abs(ping.from_lat - myPresence.lat) < 0.01 && 
+      const isFromMe = myPresence &&
+        Math.abs(ping.from_lat - myPresence.lat) < 0.01 &&
         Math.abs(ping.from_lng - myPresence.lng) < 0.01
-      
-      const isToMe = myPresence && 
-        Math.abs(ping.to_lat - myPresence.lat) < 0.01 && 
+
+      const isToMe = myPresence &&
+        Math.abs(ping.to_lat - myPresence.lat) < 0.01 &&
         Math.abs(ping.to_lng - myPresence.lng) < 0.01
 
       // Beautiful warping ripple creation
@@ -248,133 +251,58 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
       // Start ripple at sender
       createRipple(ping.from_lat, ping.from_lng, 0, true)
 
-      // Create MORE marching ants particles - continuous stream
-      const particleCount = 40 // More particles!
-      const particles: THREE.Mesh[] = []
-      
-      for (let i = 0; i < particleCount; i++) {
-        const particleGeom = new THREE.SphereGeometry(0.4, 8, 8) // Slightly bigger
-        const particleMat = new THREE.MeshBasicMaterial({
-          color: 0xffffff,
-          transparent: true,
-          opacity: 1.0,
-        })
-        const particle = new THREE.Mesh(particleGeom, particleMat)
-        particle.visible = false
-        globe.add(particle)
-        particles.push(particle)
-      }
-
       // Start audio hum
       if (isFromMe || isToMe) playArcHum()
 
-      // PHASE 1: ONLY MARCHING ANTS - continuous stream, NO tube visible
-      const phase1StartTime = Date.now()
-      const phase1Duration = 5000 // 5 seconds for ants to travel
+      // CLOCK WIPE EFFECT - Draw tube progressively along arc path
+      const drawStartTime = Date.now()
+      const drawDuration = 3000 // 3 seconds to draw the full arc
 
-      // Keep tube completely hidden during phase 1
-      tubeMaterial.opacity = 0
-      glowMaterial.opacity = 0
+      // Initially hide the tube by setting drawRange to 0
+      const positionAttribute = tubeGeometry.attributes.position
+      const totalVertices = positionAttribute.count
+      tubeGeometry.setDrawRange(0, 0)
 
-      const animateAntsOnly = () => {
-        const elapsed = Date.now() - phase1StartTime
-        const progress = Math.min(elapsed / phase1Duration, 1)
+      let drawAnimationId: number
 
-        // Continuous marching ants - spread across ENTIRE path
-        particles.forEach((particle, i) => {
-          // Each particle follows the leader with a delay
-          // This creates a continuous stream across the entire arc
-          const particleDelay = (i / particleCount) * 0.5 // Stagger by 50% of duration
-          const particleProgress = Math.max(0, Math.min(1, progress - particleDelay))
+      const animateClockWipe = () => {
+        const elapsed = Date.now() - drawStartTime
+        const progress = Math.min(elapsed / drawDuration, 1)
 
-          if (particleProgress > 0 && particleProgress < 1) {
-            const point = tubePath.getPointAt(particleProgress)
-            particle.position.copy(point)
-            particle.visible = true
-
-            // Smooth fade in/out
-            const fadeIn = Math.min(particleProgress * 5, 1)
-            const fadeOut = particleProgress > 0.8 ? (1 - particleProgress) * 5 : 1
-            ;(particle.material as THREE.MeshBasicMaterial).opacity = fadeIn * fadeOut * 0.8
-          } else if (particleProgress >= 1) {
-            // Keep at end position until tube draws
-            const point = tubePath.getPointAt(1)
-            particle.position.copy(point)
-            particle.visible = true
-            ;(particle.material as THREE.MeshBasicMaterial).opacity = 0.6
-          } else {
-            particle.visible = false
-          }
-        })
+        // Calculate how many vertices to draw based on progress
+        const vertexCount = Math.floor(progress * totalVertices)
+        tubeGeometry.setDrawRange(0, vertexCount)
 
         if (progress < 1) {
-          requestAnimationFrame(animateAntsOnly)
+          drawAnimationId = requestAnimationFrame(animateClockWipe)
         } else {
-          // Phase 1 complete - ants have landed, start tube drawing
-          startTubeDrawing()
+          // Drawing complete - start glow phase
+          startGlowPhase()
         }
       }
 
-      // Start phase 1: ants only
-      requestAnimationFrame(animateAntsOnly)
+      // Start clock wipe animation
+      requestAnimationFrame(animateClockWipe)
 
-      // PHASE 2: TUBE DRAWS IN - after ants land
-      const startTubeDrawing = () => {
-        const phase2StartTime = Date.now()
-        const phase2Duration = 2000 // 2 seconds for tube to draw
-
-        // Keep ants visible but static
-        particles.forEach(p => {
-          (p.material as THREE.MeshBasicMaterial).opacity = 0.6
-        })
-
-        const animateTubeDrawing = () => {
-          const elapsed = Date.now() - phase2StartTime
-          const progress = Math.min(elapsed / phase2Duration, 1)
-
-          // Tube fades in progressively
-          tubeMaterial.opacity = progress * 0.8
-          glowMaterial.opacity = 0 // No glow yet
-
-          if (progress < 1) {
-            requestAnimationFrame(animateTubeDrawing)
-          } else {
-            // Tube drawn - start glow phase
-            startGlowPhase()
-          }
-        }
-
-        requestAnimationFrame(animateTubeDrawing)
-      }
-
-      // PHASE 3: Glow and pulse for 5 seconds after tube is drawn
+      // GLOW PHASE - After tube is fully drawn
       const startGlowPhase = () => {
-        // Keep ants visible but slightly dimmer
-        particles.forEach(p => {
-          (p.material as THREE.MeshBasicMaterial).opacity = 0.4
-        })
-
-        // Now add pulsating glow!
         const glowStartTime = Date.now()
-        const glowDuration = 5000 // 5 seconds of pulsing
+        const glowDuration = 5000 // 5 seconds of pulsing glow
+
+        let glowAnimationId: number
 
         const animateGlow = () => {
-          const glowElapsed = Date.now() - glowStartTime
-          const glowProgress = Math.min(glowElapsed / glowDuration, 1)
+          const elapsed = Date.now() - glowStartTime
+          const progress = Math.min(elapsed / glowDuration, 1)
 
           // Pulsating glow effect
           const pulse = Math.sin(Date.now() * 0.01) * 0.3 + 0.7
           glowMaterial.opacity = 0.6 * pulse
 
-          // Keep ants pulsing too
-          particles.forEach(p => {
-            (p.material as THREE.MeshBasicMaterial).opacity = 0.3 + pulse * 0.2
-          })
-
-          if (glowProgress < 1) {
-            requestAnimationFrame(animateGlow)
+          if (progress < 1) {
+            glowAnimationId = requestAnimationFrame(animateGlow)
           } else {
-            // Glow phase complete - start fade to white
+            // Glow complete - fade to white
             startFadeToWhite()
           }
         }
@@ -382,74 +310,45 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
         animateGlow()
       }
 
-      // PHASE 4: Fade to white and thin over 10 seconds
+      // FADE TO WHITE - After glow phase
       const startFadeToWhite = () => {
-        // Keep ants visible but make them white too
-        particles.forEach(p => {
-          gsap.to((p.material as THREE.MeshBasicMaterial).color, {
-            r: 1,
-            g: 1,
-            b: 1,
-            duration: 10,
-          })
-          gsap.to((p.material as THREE.MeshBasicMaterial), {
-            opacity: 0.15,
-            duration: 10,
-          })
-        })
-        
-        // Store as persistent arc with particles
+        // Store as persistent arc
         animatingArcs.delete(ping.id)
         persistentArcs.set(ping.id, {
           id: ping.id,
           arc,
           glowArc,
           createdAt: Date.now(),
-          geometry: arcGeometry,
+          geometry: tubeGeometry,
           material: tubeMaterial,
           glowMaterial,
         })
 
-        // Animate fade to 10% white over 10 seconds
-        const fadeTimeline = gsap.timeline({
-          onComplete: () => {
-            // After fade, keep ants dimly visible
-            particles.forEach(p => {
-              (p.material as THREE.MeshBasicMaterial).opacity = 0.1
-            })
-          }
-        })
-        
-        fadeTimeline.to(tubeMaterial, {
+        // Fade to white over 10 seconds
+        gsap.to(tubeMaterial, {
           opacity: 0.1,
           duration: 10,
           ease: 'power2.out',
         })
-        
-        fadeTimeline.to(tubeMaterial.color, {
-          r: 1,
-          g: 1,
-          b: 1,
-          duration: 10,
-        }, 0)
-        
-        fadeTimeline.to(glowMaterial.color, {
-          r: 1,
-          g: 1,
-          b: 1,
-          duration: 10,
-        }, 0)
 
-        // Continue subtle pulsation during fade
+        gsap.to(tubeMaterial.color, {
+          r: 1,
+          g: 1,
+          b: 1,
+          duration: 10,
+        })
+
+        gsap.to(glowMaterial.color, {
+          r: 1,
+          g: 1,
+          b: 1,
+          duration: 10,
+        })
+
+        // Continue subtle pulsation
         const pulsateInterval = setInterval(() => {
           if (!persistentArcs.has(ping.id)) {
             clearInterval(pulsateInterval)
-            // Clean up particles when arc is removed
-            particles.forEach(p => {
-              globe.remove(p)
-              p.geometry.dispose()
-              ;(p.material as THREE.Material).dispose()
-            })
             return
           }
           const pulse = Math.sin(Date.now() * 0.008) * 0.1 + 0.9
@@ -457,12 +356,11 @@ export default function PingEngine({ globe, pings, myPresence }: PingEngineProps
         }, 50)
       }
 
-      // End ripple at receiver with bong - ALWAYS play bong!
-      // This happens when tube finishes drawing (phase 1: 5s + phase 2: 2s = 7s)
+      // End ripple at receiver with bong after tube is drawn
       setTimeout(() => {
         createRipple(ping.to_lat, ping.to_lng, 0, false)
         playBong() // Play for EVERYONE, not just me
-      }, 7000)
+      }, drawDuration)
     })
   }, [globe, pings, myPresence])
 

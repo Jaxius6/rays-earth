@@ -118,15 +118,15 @@ Located in `supabase/functions/`:
 All functions use service role key for RLS bypass. TypeScript errors in these files are expected (Deno imports from URLs).
 
 ### Arc Animation System
-See **ARCS.md** for complete documentation. Quick overview:
-- **Phase 1 (0-5s)**: ONLY marching ants travel (40 particles), tube hidden, continuous stream across entire arc
-- **Phase 2 (5-7s)**: AFTER ants land, tube progressively draws in (0 to 0.8 opacity)
-- **Phase 3 (7-12s)**: Glow and pulse celebration (glow tube pulsates)
-- **Phase 4 (12s+)**: Fade to white over 10 seconds, then slow fade to 0% over 24 hours
-- Each arc has main tube (0.6 radius), glow tube (1.0 radius), and 40 particle "ants"
-- Ripple effects at start (sender) and end (receiver at 7s with bong sound)
-- Ants use staggered delays (50% duration) to create continuous stream
-- Phases are strictly sequential - no overlap
+Arcs use a clock wipe drawing effect implemented via Three.js `setDrawRange()`:
+- **Phase 1 (0-3s)**: Clock wipe drawing effect - tube progressively reveals along arc path using vertex draw range
+- **Phase 2 (3-8s)**: Glow phase - pulsating glow tube appears (0.6 base opacity with sine wave pulse)
+- **Phase 3 (8-18s)**: Fade to white - arc transitions from orange (#ffb300) to white (#ffffff) and opacity drops to 10%
+- **Phase 4 (18s-24h)**: Long decay - arc slowly fades from 10% to 0% over 24 hours
+- **Arc height varies by distance**: Close connections (0-500km) = 20% height (12 units), Far connections (10,000km+) = 100% height (60 units)
+- Each arc has main tube (0.6 radius) and glow tube (1.0 radius)
+- Ripple effects at start (sender immediately) and end (receiver at 3s with bong sound)
+- Clock wipe creates smooth progressive reveal from start to end point
 
 ### Database Schema
 Two tables (`supabase/sql/01_schema.sql`):
